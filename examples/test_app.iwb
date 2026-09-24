@@ -1,0 +1,193 @@
+' ============================================================================
+' test_app.iwb - Multi-Instance Harness with Keyboard Navigation & PNG Support
+' Target: Executable (EXE)
+' ============================================================================
+
+$INCLUDE "windowssdk.inc"
+$INCLUDE "EnhancedLabels.inc"
+$USE "EnhancedLabels.lib"
+
+AUTODEFINE "Off"
+
+' Native Win32 API aliases to prevent IWBasic command collisions
+DECLARE IMPORT, GetDlgItemWin32 ALIAS GetDlgItem(hwndParent:UINT, nIDDlgItem:INT), UINT
+DECLARE IMPORT, SetFocusWin32 ALIAS SetFocus(hwnd:UINT), UINT
+
+$MAIN
+
+' --- Control & Event IDs ---
+CONST IDC_LABEL_LEFT   = 100
+CONST IDC_LABEL_RIGHT  = 101
+
+' Header Click Command IDs
+CONST ID_HEADER_LEFT   = 2001
+CONST ID_HEADER_RIGHT  = 2002
+
+' Link Command IDs - Control 1 (Left)
+CONST ID_LINK_PNG_1    = 3001
+CONST ID_LINK_PNG_2    = 3002
+CONST ID_LINK_STD_1    = 3003
+
+' Theme Menu Command IDs
+CONST IDM_THEME_DARK_SLATE    = 5001
+CONST IDM_THEME_OFFICE_BLUE   = 5002
+CONST IDM_THEME_GLASS_MINIMAL = 5003
+CONST IDM_THEME_CRIMSON_DARK  = 5004
+
+CONST EL_ALIGN_LEFT = 0
+
+WINDOW win
+GLOBAL POINTER pLabelLeft
+GLOBAL POINTER pLabelRight
+
+' 1. Register native custom control class
+EL_RegisterControl()
+
+' 2. Open Main Test Window
+OPENWINDOW win, 0, 0, 840, 420, @SIZE|@MINBOX|@MAXBOX|@CAPTION, 0, "EnhancedLabel Keyboard TAB & Sub-Group Test", &WndProc
+
+' 3. Create Menu Bar
+BEGINMENU win
+    MENUTITLE "&Themes"
+        MENUITEM "Dark Slate", 0,    IDM_THEME_DARK_SLATE
+        MENUITEM "Office Blue", 0,   IDM_THEME_OFFICE_BLUE
+        MENUITEM "Glass Minimal", 0, IDM_THEME_GLASS_MINIMAL
+        MENUITEM "Crimson Dark", 0,  IDM_THEME_CRIMSON_DARK
+ENDMENU
+
+' 4. Create Placeholders with @CTABSTOP enabled (WS_TABSTOP = 0x00010000)
+CONTROL win, @STATIC, "", 20, 20, 380, 320, 0x00010000, IDC_LABEL_LEFT
+CONTROL win, @STATIC, "", 420, 20, 380, 320, 0x00010000, IDC_LABEL_RIGHT
+
+' 5. Instantiate Control Instance 1 (Left Panel)
+pLabelLeft = EL_Create(win.hwnd, IDC_LABEL_LEFT)
+
+IF pLabelLeft <> NULL THEN
+    EL_ApplyTheme(pLabelLeft, EL_THEME_DARK_SLATE)
+    EL_EnableClearType(pLabelLeft, TRUE)
+    EL_EnableHighQualitySmoothingMode(pLabelLeft, TRUE)
+
+    EL_SetHeaderHeight(pLabelLeft, 42)
+    EL_SetHeaderFont(pLabelLeft, L"Segoe UI", 10, 700, FALSE)
+    EL_SetHeaderDetailsTitle(pLabelLeft, L"Keyboard Nav & Groups", RGB(248, 250, 252), EL_ALIGN_LEFT)
+    EL_SetHeaderDetailsDescriptionFont(pLabelLeft, L"Segoe UI", 9, 400, FALSE)
+    EL_SetHeaderDetailsDescription(pLabelLeft, L"Press TAB to focus, SPACE/ENTER to activate", RGB(148, 163, 184), EL_ALIGN_LEFT)
+    
+    IF EL_SetHeaderIconPNG(pLabelLeft, L"icon_header.png", 20, 20) == FALSE THEN
+        EL_SetHeaderIcon(pLabelLeft, LoadIconA(NULL, 32516), 20, 20)
+    ENDIF
+    
+    EL_SetHeaderOnClickCommand(pLabelLeft, ID_HEADER_LEFT)
+    EL_SetHeaderHighlightStyle(pLabelLeft, TRUE, EL_HIGHLIGHT_LEFT_BORDER_ONLY, 3, RGB(56, 189, 248), RGB(255, 255, 255), 255, 0, 0)
+
+    EL_EnableLinkGlow(pLabelLeft, TRUE, RGB(56, 189, 248))
+    EL_SetLinkColumns(pLabelLeft, 1, 320, 0, 8)
+    EL_SetHeaderFont(pLabelLeft, L"Segoe UI", 12, 700, FALSE)
+	 EL_SetHeaderDetailsDescriptionFont(pLabelLeft, L"Segoe UI", 11, 700, FALSE)
+    EL_SetLinkFont(pLabelLeft, L"Segoe UI", 12, 700, FALSE)
+
+    ' Add Category Sub-Group Header & Links
+    EL_AddCategoryHeader(pLabelLeft, 100, L"System Tools", RGB(56, 189, 248), RGB(30, 41, 59))
+    EL_AddPNGLink(pLabelLeft, ID_LINK_PNG_1, L"link_icon1.png", L"PNG Module Alpha", L"32-bit transparent PNG link icon", RGB(248, 250, 252), RGB(56, 189, 248), RGB(30, 41, 59), 16, 16, 10)
+    EL_AddPNGLink(pLabelLeft, ID_LINK_PNG_2, L"link_icon2.png", L"PNG Graphics Engine", L"Renders smooth anti-aliased graphics", RGB(248, 250, 252), RGB(56, 189, 248), RGB(30, 41, 59), 16, 16, 10)
+    
+    EL_AddCategoryHeader(pLabelLeft, 101, L"General Links", RGB(56, 189, 248), RGB(30, 41, 59))
+    EL_AddLink(pLabelLeft, ID_LINK_STD_1, L"Standard Text Link", L"Fallback standard link without icon", RGB(248, 250, 252), RGB(56, 189, 248), RGB(30, 41, 59), 255, TRUE, FALSE, 10)
+ENDIF
+
+' 6. Instantiate Control Instance 2 (Right Panel)
+pLabelRight = EL_Create(win.hwnd, IDC_LABEL_RIGHT)
+
+IF pLabelRight <> NULL THEN
+    EL_ApplyTheme(pLabelRight, EL_THEME_OFFICE_BLUE)
+    EL_EnableClearType(pLabelRight, TRUE)
+    EL_EnableHighQualitySmoothingMode(pLabelRight, TRUE)
+
+    EL_SetHeaderHeight(pLabelRight, 42)
+    EL_SetHeaderFont(pLabelRight, L"Segoe UI", 10, 700, FALSE)
+    EL_SetHeaderDetailsTitle(pLabelRight, L"System Monitor", RGB(30, 58, 138), EL_ALIGN_LEFT)
+    EL_SetHeaderDetailsDescriptionFont(pLabelRight, L"Segoe UI", 9, 400, FALSE)
+    EL_SetHeaderDetailsDescription(pLabelRight, L"Independent Instance State", RGB(29, 78, 216), EL_ALIGN_LEFT)
+    
+    EL_SetHeaderIcon(pLabelRight, LoadIconA(NULL, 32515), 20, 20)
+    EL_SetHeaderOnClickCommand(pLabelRight, ID_HEADER_RIGHT)
+
+    EL_EnableLinkGlow(pLabelRight, TRUE, RGB(96, 165, 250))
+    EL_SetLinkColumns(pLabelRight, 1, 300, 0, 8)
+    EL_SetLinkFont(pLabelRight, L"Segoe UI", 10, 700, FALSE)
+
+    INT k
+    FOR k = 1 TO 16
+        EL_AddLink(pLabelRight, 4000 + k, L"Monitor Item", L"Independent scrolling check", RGB(30, 58, 138), RGB(29, 78, 216), RGB(219, 234, 254), 255, TRUE, FALSE, 0)
+    NEXT k
+ENDIF
+
+' Set Focus to Left Control initially using explicit Win32 API calls
+UINT hLeftChild
+hLeftChild = GetDlgItemWin32(win.hwnd, IDC_LABEL_LEFT)
+IF hLeftChild <> 0 THEN SetFocusWin32(hLeftChild)
+
+' Main Event Loop
+WAITUNTIL win.hwnd = 0
+END
+
+' Window Event Handler
+SUB WndProc(), INT
+    SELECT @MESSAGE
+        CASE @IDCLOSEWINDOW
+            IF pLabelLeft <> NULL THEN EL_Destroy(pLabelLeft)
+            IF pLabelRight <> NULL THEN EL_Destroy(pLabelRight)
+            EL_UnregisterControl()
+            CLOSEWINDOW win
+            RETURN 0
+
+        CASE @IDSIZE
+            WINRECT rc
+            GetClientRect(win.hwnd, &rc)
+            
+            IF rc.right > 80 AND rc.bottom > 40 THEN
+                INT halfW = (rc.right - 60) / 2
+                INT fullH = rc.bottom - 40
+                
+                IF pLabelLeft <> NULL THEN
+                    EL_Resize(pLabelLeft, 20, 20, halfW, fullH)
+                ENDIF
+                
+                IF pLabelRight <> NULL THEN
+                    EL_Resize(pLabelRight, 40 + halfW, 20, halfW, fullH)
+                ENDIF
+            ENDIF          
+            RETURN 0
+
+        CASE @IDMENUPICK
+            IF pLabelLeft <> NULL AND pLabelRight <> NULL THEN
+                SELECT @MENUNUM
+                    CASE IDM_THEME_DARK_SLATE
+                        EL_ApplyTheme(pLabelLeft, EL_THEME_DARK_SLATE)
+                        EL_ApplyTheme(pLabelRight, EL_THEME_DARK_SLATE)
+                    CASE IDM_THEME_OFFICE_BLUE
+                        EL_ApplyTheme(pLabelLeft, EL_THEME_OFFICE_BLUE)
+                        EL_ApplyTheme(pLabelRight, EL_THEME_OFFICE_BLUE)
+                    CASE IDM_THEME_GLASS_MINIMAL
+                        EL_ApplyTheme(pLabelLeft, EL_THEME_GLASS_MINIMAL)
+                        EL_ApplyTheme(pLabelRight, EL_THEME_GLASS_MINIMAL)
+                    CASE IDM_THEME_CRIMSON_DARK
+                        EL_ApplyTheme(pLabelLeft, EL_THEME_CRIMSON_DARK)
+                        EL_ApplyTheme(pLabelRight, EL_THEME_CRIMSON_DARK)
+                ENDSELECT
+            ENDIF
+            RETURN 0
+
+        CASE @IDCONTROL
+            SELECT @CONTROLID
+                CASE ID_LINK_PNG_1
+                    MESSAGEBOX win, "PNG Link #1 Clicked!", "PNG Event", 0
+                CASE ID_LINK_PNG_2
+                    MESSAGEBOX win, "PNG Link #2 Clicked!", "PNG Event", 0
+                CASE ID_LINK_STD_1
+                    MESSAGEBOX win, "Standard Link Clicked!", "Standard Event", 0
+            ENDSELECT
+            RETURN 0
+    ENDSELECT
+    RETURN 0
+ENDSUB

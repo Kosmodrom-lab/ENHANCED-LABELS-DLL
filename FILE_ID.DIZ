@@ -1,0 +1,30 @@
+===============================================================================
+                    ENHANCED LABELS DLL v1.0 (32-BIT)
+===============================================================================
+ Release Date : September 2026
+ Language     : Coded in iwBasic / Win32 API
+ Platform     : Windows 7 / 8 / 10 / 11 (x86/x64)
+ Category     : Developer Tools / GUI Custom Controls / DLL Component
+ Author       : Yannick Dalissier
+ Status       : Freeware / Developer Resource
+===============================================================================
+
+ DESCRIPTION:
+ ------------
+ Lightweight, high-performance Win32 custom control DLL providing 
+ extended static label capabilities for IWBasic application development.
+
+ KEY FEATURES:
+ -------------
+  - Custom Win32 Window Class Registration ("EnhancedLabel")
+  - Anti-Flicker Double-Buffered GDI / GDI+ Rendering Architecture
+  - Multi-Style Gradient Backgrounds & Custom Alpha Vignettes
+  - Configurable Text Alignment, Drop Shadows & Outline Stroke FX
+  - Dynamic Hyperlink Hover Effects with Custom Cursor Handlers
+  - Zero External Runtime Dependencies (Pure Win32 GDI API)
+  - Native API Compatibility across IWBasic 2.5
+  - Low CPU Footprint with Complete GDI Object Resource Cleanup
+
+===============================================================================
+                [ Ideal for IWBasic Win32 GUI Applications ]
+===============================================================================

@@ -1,0 +1,2269 @@
+' ============================================================================
+' EnhancedLabels DLL - Native Custom Control Source Code
+' Target Engine: IWBasic 2.5
+' ============================================================================
+
+TYPE PROPID
+    UINT id
+ENDTYPE
+
+$DEFINE WIN32_LEAN_AND_MEAN
+$INCLUDE "windowssdk.inc"
+$INCLUDE "gdiplus.inc"
+
+DECLARE IMPORT, PrintWindowWin32 ALIAS PrintWindow(hwnd:UINT, hdcBmp:UINT, nFlags:UINT), INT
+DECLARE IMPORT, SetCursorA ALIAS SetCursor(hCursor:UINT), UINT
+DECLARE IMPORT, ShowWindowWin32 ALIAS ShowWindow(hwnd:UINT, nCmdShow:INT), INT
+DECLARE IMPORT, LineToWin32 ALIAS LineTo(hdc:UINT, x:INT, y:INT), INT
+DECLARE IMPORT, SetFocusWin32 ALIAS SetFocus(hwnd:UINT), UINT
+
+' --- Exported DLL Functions ---
+EXPORT EL_RegisterControl
+EXPORT EL_UnregisterControl
+EXPORT EL_Create
+EXPORT EL_Destroy
+EXPORT EL_SetHeaderFont
+EXPORT EL_SetLinkFont
+EXPORT EL_SetHeaderBackgroundGradient
+EXPORT EL_SetHeaderHeight
+EXPORT EL_SetHeaderStandardLeftTitle
+EXPORT EL_SetHeaderDetailsTitle
+EXPORT EL_SetHeaderDetailsDescription
+EXPORT EL_SetHeaderDetailsDescriptionFont
+EXPORT EL_SetHeaderOnClickCommand
+EXPORT EL_SetHeaderHighlightStyle
+EXPORT EL_SetHeaderBorder
+EXPORT EL_SetBodySolidColor
+EXPORT EL_SetBody3StopGradient
+EXPORT EL_SetBodyBorder
+EXPORT EL_Resize
+EXPORT EL_ToggleCollapse
+EXPORT EL_SetHeaderIcon
+EXPORT EL_IsCollapsed
+EXPORT EL_GetHeaderHeight
+EXPORT EL_GetControlHeight
+EXPORT EL_GetHeaderTitle
+EXPORT EL_ApplyTheme
+EXPORT EL_AddLink
+EXPORT EL_AddContentLink
+EXPORT EL_AddLinkBarItem
+EXPORT EL_ClearAllLinks
+EXPORT EL_RemoveLink
+EXPORT EL_EnableClearType
+EXPORT EL_EnableHighQualitySmoothingMode
+EXPORT EL_SetLinkBarHeight
+EXPORT EL_SetLinkBarBackgroundGradient
+EXPORT EL_SetLinkBarVerticalSeparator
+EXPORT EL_SetHeaderBackgroundImage
+EXPORT EL_SetBodyBackgroundImage
+EXPORT EL_SetHeaderIconPNG
+EXPORT EL_AddPNGLink
+EXPORT EL_EnableLinkGlow
+EXPORT EL_SetLinkColumns
+EXPORT EL_SetScrollOffset
+EXPORT EL_GetScrollOffset
+EXPORT EL_GetLinkCount
+EXPORT EL_GetLinkBarCount
+EXPORT EL_GetHoveredLinkIndex
+EXPORT EL_GetMaxScrollOffset
+EXPORT EL_AddCategoryHeader
+EXPORT EL_ToggleCategory
+
+' --- Theme Presets ---
+CONST EL_THEME_DARK_SLATE    = 1
+CONST EL_THEME_OFFICE_BLUE   = 2
+CONST EL_THEME_GLASS_MINIMAL = 3
+CONST EL_THEME_CRIMSON_DARK  = 4
+
+' --- Border Side Enumeration ---
+CONST EL_BORDER_NONE   = 0
+CONST EL_BORDER_LEFT   = 1
+CONST EL_BORDER_TOP    = 2
+CONST EL_BORDER_RIGHT  = 3
+CONST EL_BORDER_BOTTOM = 4
+CONST EL_BORDER_ALL    = 5
+
+' --- Highlight Style Enumeration ---
+CONST EL_HIGHLIGHT_BORDER_ONLY        = 0
+CONST EL_HIGHLIGHT_BG_ONLY            = 1
+CONST EL_HIGHLIGHT_TEXT_ONLY          = 2
+CONST EL_HIGHLIGHT_BORDER_BG          = 3
+CONST EL_HIGHLIGHT_BORDER_TEXT        = 4
+CONST EL_HIGHLIGHT_BG_TEXT            = 5
+CONST EL_HIGHLIGHT_LEFT_BORDER_ONLY   = 6
+CONST EL_HIGHLIGHT_RIGHT_BORDER_ONLY  = 7
+CONST EL_HIGHLIGHT_BOTTOM_BORDER_ONLY = 8
+
+' --- Constants ---
+CONST ENHANCED_LABEL_CLASS   = "IW_EnhancedLabelClass"
+CONST ENHANCED_TOOLTIP_CLASS = "IW_EnhancedTooltipClass"
+CONST WrapModeTile = 0
+CONST EL_TIMER_ID = 1001
+CONST EL_TT_TIMER_ID = 1002
+CONST MAX_EL_LINKS = 16
+
+' --- Custom Structures ---
+TYPE GpPointF
+    FLOAT X
+    FLOAT Y
+ENDTYPE
+
+TYPE EL_LINK_ITEM
+    UINT      cmdID
+    WSTRING   text[128]
+    WSTRING   tips[128]
+    UINT      hBitmap           ' Legacy HBITMAP/HICON
+    POINTER   pGpImage          ' GDI+ Image Pointer (GpImage*)
+    INT       imgWidth
+    INT       imgHeight
+    UINT      textColor
+    UINT      highlight
+    UINT      bgHighlight
+    UINT      alphaBlending
+    INT       boldHighlight
+    INT       underlineHighlight
+    UINT      indent
+    WINRECT   rcBounds
+    ' Sub-Group / Category Extensions
+    INT       isCategoryHeader    ' TRUE if item acts as a group header
+    INT       isCategoryCollapsed ' TRUE if group children are hidden
+    INT       categoryID          ' Parent category ID for child items
+ENDTYPE
+
+TYPE ENHANCED_LABEL
+    UINT      hwndCtrl
+    
+    INT       fullHeight
+    INT       animHeight
+    INT       isCollapsed
+    INT       isAnimating
+    
+    UINT      hSnapshotBmp
+    INT       snapshotWidth
+    INT       snapshotHeight
+    
+    UINT      bodyBgColor
+    INT       useBodyGradient
+    UINT      bodyGradColor1, bodyGradColor2, bodyGradColor3
+    INT       bodyGradVertical
+    UINT      hBodyBgBitmap
+    INT       bodyBmpWidth
+    INT       bodyBmpHeight
+    
+    INT       bodyBorderSide
+    UINT      bodyBorderColor
+    UINT      bodyBorderWidth
+    UINT      bodyBorderIndentX
+    UINT      bodyBorderIndentY
+    
+    INT       headerHeight
+    INT       headerIndentX, headerIndentY
+    UINT      headerGradColor1, headerGradColor2
+    INT       headerGradVertical
+    WSTRING   headerTitle[128]
+    UINT      headerTextColor
+    INT       headerAlignment
+    UINT      hHeaderFont
+    INT       headerCmdID
+    UINT      hHeaderBgBitmap
+    INT       headerBmpWidth
+    INT       headerBmpHeight
+    POINTER   pHeaderGpImage    ' GDI+ Image Pointer for Header Icon
+    INT       headerGpWidth
+    INT       headerGpHeight
+    
+    INT       headerBorderSide
+    UINT      headerBorderColor
+    UINT      headerBorderWidth
+    UINT      headerBorderIndentX
+    UINT      headerBorderIndentY
+    
+    WSTRING   headerDesc[128]
+    UINT      headerDescTextColor
+    INT       headerDescAlignment
+    UINT      hHeaderDescFont
+    INT       useDualHeader
+    
+    UINT      hHeaderIcon
+    INT       iconWidth
+    INT       iconHeight
+    
+    INT       linkBarHeight
+    UINT      linkBarGradColor1, linkBarGradColor2
+    INT       linkBarGradVertical
+    INT       useLinkBar
+    
+    INT       showVertSeparator
+    UINT      vertSeparatorColor
+    UINT      vertSeparatorWidth
+    UINT      vertSeparatorIndent
+    
+    INT       enableLinkGlow
+    UINT      linkGlowColor
+
+    INT       linkColumns
+    INT       linkColWidth
+    INT       linkColGapX
+    INT       linkRowGapY
+
+    INT       scrollOffset
+    INT       isDraggingThumb
+    INT       dragStartY
+    INT       dragStartOffset
+    
+    ' Theme Dynamic Palette Colors
+    UINT      themeLinkTextColor
+    UINT      themeLinkHighlightColor
+    UINT      themeLinkBgColor
+    UINT      themeBarTextColor
+    UINT      themeBarHighlightColor
+    UINT      themeScrollTrackColor
+    UINT      themeScrollThumbColor
+
+    ' Tooltip Theme Colors
+    UINT      themeTTBgColor
+    UINT      themeTTTextColor
+    UINT      themeTTGlowColor
+
+    UINT      hLinkFont
+    
+    INT       isHovered
+    INT       enableHighlight
+    INT       headerHighlightStyle
+    UINT      highlightBorderColor
+
+    EL_LINK_ITEM links[MAX_EL_LINKS]
+    INT          linkCount
+
+    EL_LINK_ITEM linkBars[MAX_EL_LINKS]
+    INT          linkBarCount
+    
+    UINT      hwndCustomTT
+    WSTRING   activeTipText[128]
+    
+    INT       hoveredLinkIndex
+    INT       pressedLinkIndex
+    INT       hoveredBarIndex
+    INT       pressedBarIndex
+
+    INT       enableClearType
+    INT       enableSmoothing
+ENDTYPE
+
+GLOBAL g_gdiplusToken : g_gdiplusToken = 0
+GLOBAL g_gdiplusRefCount : g_gdiplusRefCount = 0
+
+DECLARE EL_CustomClassProc(hwnd:UINT, uMsg:UINT, wp:WPARAM, lp:LPARAM), INT
+DECLARE EL_TooltipClassProc(hwnd:UINT, uMsg:UINT, wp:WPARAM, lp:LPARAM), INT
+DECLARE EL_RenderToDC(ptr:POINTER, hdcTarget:UINT, width:INT, height:INT)
+DECLARE TakeControlSnapshot(ptr:POINTER)
+
+SUB InitGDIPlus()
+    IF g_gdiplusRefCount == 0 THEN
+        GdiplusStartupInput gdipInput
+        gdipInput.GdiPlusVersion = 1
+        gdipInput.DebugEventCallback = NULL
+        gdipInput.SuppressBackgroundThread = FALSE
+        gdipInput.SuppressExternalCodecs = FALSE
+        GdiplusStartup(&g_gdiplusToken, &gdipInput, NULL)
+    ENDIF
+    g_gdiplusRefCount = g_gdiplusRefCount + 1
+ENDSUB
+
+SUB ShutdownGDIPlus()
+    IF g_gdiplusRefCount > 0 THEN
+        g_gdiplusRefCount = g_gdiplusRefCount - 1
+        IF g_gdiplusRefCount == 0 AND g_gdiplusToken <> 0 THEN
+            GdiplusShutdown(g_gdiplusToken)
+            g_gdiplusToken = 0
+        ENDIF
+    ENDIF
+ENDSUB
+
+SUB ToGdiPlusColor(rgbColor:UINT), UINT
+    UINT r : r = rgbColor & 0x000000FF
+    UINT g : g = (rgbColor & 0x0000FF00) >> 8
+    UINT b : b = (rgbColor & 0x00FF0000) >> 16
+    RETURN 0xFF000000 | (r << 16) | (g << 8) | b
+ENDSUB
+
+SUB EL_TooltipClassProc(hwnd:UINT, uMsg:UINT, wp:WPARAM, lp:LPARAM), INT
+    POINTER pData = GetPropA(hwnd, "EL_pData")
+    POINTER pCtrl
+    pCtrl = pData
+
+    SELECT uMsg
+        CASE 0x0113 ' WM_TIMER
+            IF wp == EL_TT_TIMER_ID THEN
+                KillTimer(hwnd, EL_TT_TIMER_ID)
+                ShowWindowWin32(hwnd, 0)
+                RETURN 0
+            ENDIF
+
+        CASE 0x000F ' WM_PAINT
+            PAINTSTRUCT ps
+            UINT hdc = BeginPaint(hwnd, &ps)
+            WINRECT rc
+            GetClientRect(hwnd, &rc)
+            UINT memDC = CreateCompatibleDC(hdc)
+            UINT hBmp = CreateCompatibleBitmap(hdc, rc.right, rc.bottom)
+            UINT hOldBmp = SelectObject(memDC, hBmp)
+            
+            UINT ttBgCol = RGB(15, 23, 42)
+            UINT ttTextCol = RGB(248, 250, 252)
+            UINT ttGlowCol = RGB(56, 189, 248)
+
+            IF pCtrl <> NULL THEN
+                ttBgCol   = #<ENHANCED_LABEL>pCtrl.themeTTBgColor
+                ttTextCol = #<ENHANCED_LABEL>pCtrl.themeTTTextColor
+                ttGlowCol = #<ENHANCED_LABEL>pCtrl.themeTTGlowColor
+            ENDIF
+
+            ' Theme-based Solid Background
+            UINT hBgBrush = CreateSolidBrush(ttBgCol)
+            FillRect(memDC, &rc, hBgBrush)
+            DeleteObject(hBgBrush)
+
+            ' Outer Glowing Border Line using Theme Accent
+            UINT hGlowPenOuter = CreatePen(0, 3, ttGlowCol)
+            UINT hOldPen = SelectObject(memDC, hGlowPenOuter)
+            UINT hOldBr = SelectObject(memDC, GetStockObject(5))
+            Rectangle(memDC, 0, 0, rc.right, rc.bottom)
+            SelectObject(memDC, hOldPen)
+            DeleteObject(hGlowPenOuter)
+
+            ' Inner Core Accent
+            UINT hGlowPenInner = CreatePen(0, 1, RGB(255, 255, 255))
+            SelectObject(memDC, hGlowPenInner)
+            Rectangle(memDC, 1, 1, rc.right - 1, rc.bottom - 1)
+            SelectObject(memDC, hOldPen)
+            SelectObject(memDC, hOldBr)
+            DeleteObject(hGlowPenInner)
+
+            IF pCtrl <> NULL THEN
+                SetBkMode(memDC, 1)
+                SetTextColor(memDC, ttTextCol)
+                UINT hFont = GetStockObject(17)
+                UINT hOldFont = SelectObject(memDC, hFont)
+                WINRECT rcText
+                rcText.left = rc.left + 8
+                rcText.top = rc.top + 5
+                rcText.right = rc.right - 8
+                rcText.bottom = rc.bottom - 5
+                DrawTextW(memDC, &#<ENHANCED_LABEL>pCtrl.activeTipText, -1, &rcText, 0)
+                SelectObject(memDC, hOldFont)
+            ENDIF
+            BitBlt(hdc, 0, 0, rc.right, rc.bottom, memDC, 0, 0, 0x00CC0020)
+            SelectObject(memDC, hOldBmp)
+            DeleteObject(hBmp)
+            DeleteDC(memDC)
+            EndPaint(hwnd, &ps)
+            RETURN 0
+
+        CASE 0x0002 ' WM_DESTROY
+            KillTimer(hwnd, EL_TT_TIMER_ID)
+            RemovePropA(hwnd, "EL_pData")
+            RETURN 0
+    ENDSELECT
+    RETURN DefWindowProcA(hwnd, uMsg, wp, lp)
+ENDSUB
+
+SUB ShowCustomTooltip(pData:POINTER, pTipText:POINTER, x:INT, y:INT)
+    IF pData == NULL OR pTipText == NULL THEN RETURN
+    POINTER pCtrl
+    pCtrl = pData
+    
+    UINT hwndMain = #<ENHANCED_LABEL>pCtrl.hwndCtrl
+    UINT hTT = #<ENHANCED_LABEL>pCtrl.hwndCustomTT
+
+    IF hTT <> 0 AND IsWindowVisible(hTT) THEN
+        IF lstrcmpW(#<ENHANCED_LABEL>pCtrl.activeTipText, pTipText) == 0 THEN
+            RETURN
+        ENDIF
+    ENDIF
+
+    lstrcpyW(#<ENHANCED_LABEL>pCtrl.activeTipText, pTipText)
+    UINT hdc = GetDC(hwndMain)
+    UINT hFont = GetStockObject(17)
+    UINT hOldFont = SelectObject(hdc, hFont)
+    WINRECT rcText
+    rcText.left = 0 : rcText.top = 0 : rcText.right = 0 : rcText.bottom = 0
+    DrawTextW(hdc, pTipText, -1, &rcText, 0x00000400)
+    SelectObject(hdc, hOldFont)
+    ReleaseDC(hwndMain, hdc)
+    INT tipWidth = (rcText.right - rcText.left) + 18
+    INT tipHeight = (rcText.bottom - rcText.top) + 10
+    POINT pt
+    pt.x = x + 12 : pt.y = y + 18
+    ClientToScreen(hwndMain, &pt)
+    
+    IF hTT == 0 THEN
+        hTT = CreateWindowExA(0x00080088, &ENHANCED_TOOLTIP_CLASS, "", 0x80000000, pt.x, pt.y, tipWidth, tipHeight, hwndMain, 0, GetModuleHandleA(NULL), 0)
+        #<ENHANCED_LABEL>pCtrl.hwndCustomTT = hTT
+        SetPropA(hTT, "EL_pData", pData)
+        SetLayeredWindowAttributes(hTT, 0, 195, 0x00000002)
+    ELSE
+        MoveWindow(hTT, pt.x, pt.y, tipWidth, tipHeight, TRUE)
+    ENDIF
+
+    ShowWindowWin32(hTT, 4)
+    RedrawWindow(hTT, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    
+    KillTimer(hTT, EL_TT_TIMER_ID)
+    SetTimer(hTT, EL_TT_TIMER_ID, 3000, NULL)
+ENDSUB
+
+SUB HideCustomTooltip(pData:POINTER)
+    IF pData <> NULL THEN
+        POINTER pCtrl
+        pCtrl = pData
+        UINT hTargetTT = #<ENHANCED_LABEL>pCtrl.hwndCustomTT
+        IF hTargetTT <> 0 THEN 
+            ShowWindowWin32(hTargetTT, 0)
+            KillTimer(hTargetTT, EL_TT_TIMER_ID)
+            #<ENHANCED_LABEL>pCtrl.activeTipText = L""
+        ENDIF
+    ENDIF
+ENDSUB
+
+SUB EL_RegisterControl(), INT
+    WNDCLASSEX wc
+    wc.cbSize = LEN(WNDCLASSEX)
+    wc.style = 0x0003
+    wc.lpfnWndProc = &EL_CustomClassProc
+    wc.cbClsExtra = 0 : wc.cbWndExtra = 0
+    wc.hInstance = GetModuleHandleA(NULL)
+    wc.hIcon = NULL
+    wc.hCursor = LoadCursorA(NULL, 32512)
+    wc.hbrBackground = NULL
+    wc.lpszMenuName = NULL
+    wc.lpszClassName = &ENHANCED_LABEL_CLASS
+    wc.hIconSm = NULL
+    RegisterClassExA(&wc)
+
+    WNDCLASSEX wcTT
+    wcTT.cbSize = LEN(WNDCLASSEX)
+    wcTT.style = 0x0003
+    wcTT.lpfnWndProc = &EL_TooltipClassProc
+    wcTT.cbClsExtra = 0 : wcTT.cbWndExtra = 0
+    wcTT.hInstance = GetModuleHandleA(NULL)
+    wcTT.hIcon = NULL
+    wcTT.hCursor = LoadCursorA(NULL, 32512)
+    wcTT.hbrBackground = NULL
+    wcTT.lpszMenuName = NULL
+    wcTT.lpszClassName = &ENHANCED_TOOLTIP_CLASS
+    wcTT.hIconSm = NULL
+    RETURN RegisterClassExA(&wcTT)
+ENDSUB
+
+SUB EL_AddCategoryHeader(ptr:POINTER, categoryID:INT, pText:POINTER, textColor:UINT, headerBgColor:UINT)
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN
+
+    INT idx = #<ENHANCED_LABEL>pCtrl.linkCount
+    IF idx >= 16 THEN RETURN
+
+    #<ENHANCED_LABEL>pCtrl.links[idx].cmdID = 0
+    #<ENHANCED_LABEL>pCtrl.links[idx].isCategoryHeader = TRUE
+    #<ENHANCED_LABEL>pCtrl.links[idx].isCategoryCollapsed = FALSE
+    #<ENHANCED_LABEL>pCtrl.links[idx].categoryID = categoryID
+
+    IF pText <> NULL THEN
+        lstrcpynW(#<ENHANCED_LABEL>pCtrl.links[idx].text, pText, 128)
+    ENDIF
+
+    #<ENHANCED_LABEL>pCtrl.links[idx].textColor   = IIF(textColor <> 0, textColor, #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor)
+    #<ENHANCED_LABEL>pCtrl.links[idx].highlight   = #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor
+    #<ENHANCED_LABEL>pCtrl.links[idx].bgHighlight = IIF(headerBgColor <> 0, headerBgColor, #<ENHANCED_LABEL>pCtrl.themeLinkBgColor)
+    #<ENHANCED_LABEL>pCtrl.links[idx].indent      = 0
+
+    #<ENHANCED_LABEL>pCtrl.linkCount = idx + 1
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+ENDSUB
+
+SUB EL_ToggleCategory(ptr:POINTER, categoryID:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    
+    INT i
+    FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkCount - 1
+        IF #<ENHANCED_LABEL>pCtrl.links[i].isCategoryHeader == TRUE AND #<ENHANCED_LABEL>pCtrl.links[i].categoryID == categoryID THEN
+            #<ENHANCED_LABEL>pCtrl.links[i].isCategoryCollapsed = NOT #<ENHANCED_LABEL>pCtrl.links[i].isCategoryCollapsed
+            RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+            RETURN TRUE
+        ENDIF
+    NEXT i
+    RETURN FALSE
+ENDSUB
+
+SUB EL_SetHeaderIconPNG(ptr:POINTER, pFilePath:POINTER, width:INT, height:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL OR pFilePath == NULL THEN RETURN FALSE
+
+    IF #<ENHANCED_LABEL>pCtrl.pHeaderGpImage <> NULL THEN
+        GdipDisposeImage(#<ENHANCED_LABEL>pCtrl.pHeaderGpImage)
+        #<ENHANCED_LABEL>pCtrl.pHeaderGpImage = NULL
+    ENDIF
+
+    POINTER pImg = NULL
+    UINT status = GdipLoadImageFromFile(pFilePath, &pImg)
+    IF status == 0 AND pImg <> NULL THEN
+        #<ENHANCED_LABEL>pCtrl.pHeaderGpImage = pImg
+        #<ENHANCED_LABEL>pCtrl.headerGpWidth = width
+        #<ENHANCED_LABEL>pCtrl.headerGpHeight = height
+        RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+        RETURN TRUE
+    ENDIF
+    RETURN FALSE
+ENDSUB
+
+SUB EL_AddPNGLink(ptr:POINTER, cmdID:UINT, pFilePath:POINTER, pText:POINTER, pTips:POINTER, textColor:UINT, highlight:UINT, bgHighlight:UINT, imgWidth:INT, imgHeight:INT, indent:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+
+    INT idx = #<ENHANCED_LABEL>pCtrl.linkCount
+    IF idx >= MAX_EL_LINKS THEN RETURN FALSE
+
+    POINTER pImg = NULL
+    IF pFilePath <> NULL THEN
+        GdipLoadImageFromFile(pFilePath, &pImg)
+    ENDIF
+
+    #<ENHANCED_LABEL>pCtrl.links[idx].cmdID = cmdID
+    #<ENHANCED_LABEL>pCtrl.links[idx].hBitmap = 0
+    #<ENHANCED_LABEL>pCtrl.links[idx].pGpImage = pImg
+    #<ENHANCED_LABEL>pCtrl.links[idx].imgWidth = imgWidth
+    #<ENHANCED_LABEL>pCtrl.links[idx].imgHeight = imgHeight
+    #<ENHANCED_LABEL>pCtrl.links[idx].textColor = textColor
+    #<ENHANCED_LABEL>pCtrl.links[idx].highlight = highlight
+    #<ENHANCED_LABEL>pCtrl.links[idx].bgHighlight = bgHighlight
+    #<ENHANCED_LABEL>pCtrl.links[idx].alphaBlending = 255
+    #<ENHANCED_LABEL>pCtrl.links[idx].boldHighlight = FALSE
+    #<ENHANCED_LABEL>pCtrl.links[idx].underlineHighlight = FALSE
+    #<ENHANCED_LABEL>pCtrl.links[idx].indent = indent
+
+    IF pText <> NULL THEN lstrcpyW(#<ENHANCED_LABEL>pCtrl.links[idx].text, pText) ELSE #<ENHANCED_LABEL>pCtrl.links[idx].text = L""
+    IF pTips <> NULL THEN lstrcpyW(#<ENHANCED_LABEL>pCtrl.links[idx].tips, pTips) ELSE #<ENHANCED_LABEL>pCtrl.links[idx].tips = L""
+
+    #<ENHANCED_LABEL>pCtrl.linkCount = idx + 1
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_GetLinkCount(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN 0
+    RETURN #<ENHANCED_LABEL>pCtrl.linkCount
+ENDSUB
+
+SUB EL_GetLinkBarCount(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN 0
+    RETURN #<ENHANCED_LABEL>pCtrl.linkBarCount
+ENDSUB
+
+SUB EL_GetHoveredLinkIndex(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN -1
+    RETURN #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex
+ENDSUB
+
+SUB EL_GetMaxScrollOffset(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN 0
+    WINRECT rcClient
+    GetClientRect(#<ENHANCED_LABEL>pCtrl.hwndCtrl, &rcClient)
+    INT bodyTop = #<ENHANCED_LABEL>pCtrl.headerHeight
+    INT linkBarHeight = IIF(#<ENHANCED_LABEL>pCtrl.useLinkBar == TRUE, #<ENHANCED_LABEL>pCtrl.linkBarHeight, 0)
+    INT bodyH = rcClient.bottom - bodyTop - linkBarHeight
+    INT numCols = IIF(#<ENHANCED_LABEL>pCtrl.linkColumns < 1, 1, #<ENHANCED_LABEL>pCtrl.linkColumns)
+    INT itemHeight = 28
+    INT gapY = #<ENHANCED_LABEL>pCtrl.linkRowGapY
+    INT totalRows = (#<ENHANCED_LABEL>pCtrl.linkCount + numCols - 1) / numCols
+    INT contentH = totalRows * (itemHeight + gapY) + 20
+    INT maxScroll = contentH - bodyH
+    RETURN IIF(maxScroll < 0, 0, maxScroll)
+ENDSUB
+
+SUB EL_UnregisterControl(), INT
+    UnregisterClassA(&ENHANCED_TOOLTIP_CLASS, GetModuleHandleA(NULL))
+    RETURN UnregisterClassA(&ENHANCED_LABEL_CLASS, GetModuleHandleA(NULL))
+ENDSUB
+
+SUB TakeControlSnapshot(ptr:POINTER)
+    POINTER pData = ptr
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN
+
+    UINT hwnd = #<ENHANCED_LABEL>pCtrl.hwndCtrl
+    WINRECT rc
+    GetClientRect(hwnd, &rc)
+
+    IF rc.right <= 0 OR rc.bottom <= 0 THEN RETURN
+
+    IF #<ENHANCED_LABEL>pCtrl.hSnapshotBmp <> 0 THEN
+        DeleteObject(#<ENHANCED_LABEL>pCtrl.hSnapshotBmp)
+        #<ENHANCED_LABEL>pCtrl.hSnapshotBmp = 0
+    ENDIF
+
+    UINT hdc = GetDC(hwnd)
+    UINT memDC = CreateCompatibleDC(hdc)
+    UINT hBmp = CreateCompatibleBitmap(hdc, rc.right, rc.bottom)
+    UINT hOldBmp = SelectObject(memDC, hBmp)
+
+    EL_RenderToDC(pData, memDC, rc.right, rc.bottom)
+
+    SelectObject(memDC, hOldBmp)
+    DeleteDC(memDC)
+    ReleaseDC(hwnd, hdc)
+
+    #<ENHANCED_LABEL>pCtrl.hSnapshotBmp = hBmp
+    #<ENHANCED_LABEL>pCtrl.snapshotWidth = rc.right
+    #<ENHANCED_LABEL>pCtrl.snapshotHeight = rc.bottom
+ENDSUB
+
+' ----------------------------------------------------------------------------
+' Full GDI / GDI+ Rendering Engine (Shared by WM_PAINT & TakeControlSnapshot)
+' ----------------------------------------------------------------------------
+SUB EL_RenderToDC(ptr:POINTER, hdcTarget:UINT, width:INT, height:INT)
+    POINTER pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN
+
+    INT i, bodyTop, linkBarHeight, bodyH
+    INT numCols, itemHeight, gapY, totalRows, contentH, maxScroll
+    INT trackH, thumbH, availTrack
+    UINT hOldPen, hOldBr, hOldFont2
+    INT isCatCollapsed, isChildOfCollapsed
+
+    UINT memDC = CreateCompatibleDC(hdcTarget)
+    UINT hBmp = CreateCompatibleBitmap(hdcTarget, width, height)
+    UINT hOldBmp = SelectObject(memDC, hBmp)
+
+    POINTER pMainGfx = NULL
+    GdipCreateFromHDC(memDC, &pMainGfx)
+    IF pMainGfx <> NULL THEN
+        IF #<ENHANCED_LABEL>pCtrl.enableClearType THEN GdipSetTextRenderingHint(pMainGfx, 5)
+        IF #<ENHANCED_LABEL>pCtrl.enableSmoothing THEN GdipSetSmoothingMode(pMainGfx, 2)
+        GdipDeleteGraphics(pMainGfx)
+    ENDIF
+
+    bodyTop = #<ENHANCED_LABEL>pCtrl.headerHeight
+    linkBarHeight = IIF(#<ENHANCED_LABEL>pCtrl.useLinkBar == TRUE, #<ENHANCED_LABEL>pCtrl.linkBarHeight, 0)
+    bodyH = height - bodyTop - linkBarHeight
+
+    ' 1. Body Background Pass
+    IF bodyH > 0 THEN
+        IF #<ENHANCED_LABEL>pCtrl.hBodyBgBitmap <> 0 THEN
+            UINT bodyMemDC = CreateCompatibleDC(memDC)
+            UINT hOldBodyBmp = SelectObject(bodyMemDC, #<ENHANCED_LABEL>pCtrl.hBodyBgBitmap)
+            INT srcW = IIF(#<ENHANCED_LABEL>pCtrl.bodyBmpWidth <= 0, 100, #<ENHANCED_LABEL>pCtrl.bodyBmpWidth)
+            INT srcH = IIF(#<ENHANCED_LABEL>pCtrl.bodyBmpHeight <= 0, 100, #<ENHANCED_LABEL>pCtrl.bodyBmpHeight)
+            StretchBlt(memDC, 0, bodyTop, width, bodyH, bodyMemDC, 0, 0, srcW, srcH, 0x00CC0020)
+            SelectObject(bodyMemDC, hOldBodyBmp)
+            DeleteDC(bodyMemDC)
+        ELSEIF #<ENHANCED_LABEL>pCtrl.useBodyGradient == TRUE THEN
+            POINTER pBodyGfx = NULL, pBodyBrush = NULL
+            GdipCreateFromHDC(memDC, &pBodyGfx)
+            IF pBodyGfx <> NULL THEN
+                GpPointF ptStart, ptEnd
+                ptStart.X = 0.0 : ptStart.Y = bodyTop
+                ptEnd.X = IIF(#<ENHANCED_LABEL>pCtrl.bodyGradVertical, 0.0, width)
+                ptEnd.Y = IIF(#<ENHANCED_LABEL>pCtrl.bodyGradVertical, bodyTop + bodyH, bodyTop)
+                UINT c1 = ToGdiPlusColor(#<ENHANCED_LABEL>pCtrl.bodyGradColor1)
+                UINT c2 = ToGdiPlusColor(#<ENHANCED_LABEL>pCtrl.bodyGradColor2)
+                UINT c3 = ToGdiPlusColor(#<ENHANCED_LABEL>pCtrl.bodyGradColor3)
+                GdipCreateLineBrush(&ptStart, &ptEnd, c1, c3, WrapModeTile, &pBodyBrush)
+                IF pBodyBrush <> NULL THEN
+                    UINT colors[3]
+                    colors[0] = c1 : colors[1] = c2 : colors[2] = c3
+                    FLOAT positions[3]
+                    positions[0] = 0.0 : positions[1] = 0.5 : positions[2] = 1.0
+                    GdipSetLinePresetBlend(pBodyBrush, &colors[0], &positions[0], 3)
+                    GdipFillRectangle(pBodyGfx, pBodyBrush, 0.0, bodyTop, width, bodyH)
+                    GdipDeleteBrush(pBodyBrush)
+                ENDIF
+                GdipDeleteGraphics(pBodyGfx)
+            ENDIF
+        ELSE
+            WINRECT rcBody
+            rcBody.left = 0 : rcBody.top = bodyTop : rcBody.right = width : rcBody.bottom = bodyTop + bodyH
+            UINT hBgBrush = CreateSolidBrush(#<ENHANCED_LABEL>pCtrl.bodyBgColor)
+            FillRect(memDC, &rcBody, hBgBrush)
+            DeleteObject(hBgBrush)
+        ENDIF
+
+        INT bBodySide = #<ENHANCED_LABEL>pCtrl.bodyBorderSide
+        IF bBodySide <> EL_BORDER_NONE AND #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE THEN
+            UINT hBodyPen = CreatePen(0, #<ENHANCED_LABEL>pCtrl.bodyBorderWidth, #<ENHANCED_LABEL>pCtrl.bodyBorderColor)
+            UINT hOldBodyPen = SelectObject(memDC, hBodyPen)
+            INT bodyIndentX = #<ENHANCED_LABEL>pCtrl.bodyBorderIndentX
+            INT bodyIndentY = #<ENHANCED_LABEL>pCtrl.bodyBorderIndentY
+            INT bodyBottom = bodyTop + bodyH
+            IF bBodySide == EL_BORDER_LEFT OR bBodySide == EL_BORDER_ALL THEN
+                MoveToEx(memDC, bodyIndentX, bodyTop + bodyIndentY, NULL)
+                LineToWin32(memDC, bodyIndentX, bodyBottom - bodyIndentY)
+            ENDIF
+            IF bBodySide == EL_BORDER_TOP OR bBodySide == EL_BORDER_ALL THEN
+                MoveToEx(memDC, bodyIndentX, bodyTop + bodyIndentY, NULL)
+                LineToWin32(memDC, width - bodyIndentX, bodyTop + bodyIndentY)
+            ENDIF
+            IF bBodySide == EL_BORDER_RIGHT OR bBodySide == EL_BORDER_ALL THEN
+                MoveToEx(memDC, width - bodyIndentX, bodyTop + bodyIndentY, NULL)
+                LineToWin32(memDC, width - bodyIndentX, bodyBottom - bodyIndentY)
+            ENDIF
+            IF bBodySide == EL_BORDER_BOTTOM OR bBodySide == EL_BORDER_ALL THEN
+                MoveToEx(memDC, bodyIndentX, bodyBottom - bodyIndentY, NULL)
+                LineToWin32(memDC, width - bodyIndentX, bodyBottom - bodyIndentY)
+            ENDIF
+            SelectObject(memDC, hOldBodyPen)
+            DeleteObject(hBodyPen)
+        ENDIF
+    ENDIF
+
+    ' 2. Top Main Header Pass
+    IF #<ENHANCED_LABEL>pCtrl.headerHeight > 0 THEN
+        IF #<ENHANCED_LABEL>pCtrl.hHeaderBgBitmap <> 0 THEN
+            UINT headMemDC = CreateCompatibleDC(memDC)
+            UINT hOldHeadBmp = SelectObject(headMemDC, #<ENHANCED_LABEL>pCtrl.hHeaderBgBitmap)
+            INT hSrcW = IIF(#<ENHANCED_LABEL>pCtrl.headerBmpWidth <= 0, 100, #<ENHANCED_LABEL>pCtrl.headerBmpWidth)
+            INT hSrcH = IIF(#<ENHANCED_LABEL>pCtrl.headerBmpHeight <= 0, 100, #<ENHANCED_LABEL>pCtrl.headerBmpHeight)
+            StretchBlt(memDC, 0, 0, width, #<ENHANCED_LABEL>pCtrl.headerHeight, headMemDC, 0, 0, hSrcW, hSrcH, 0x00CC0020)
+            SelectObject(headMemDC, hOldHeadBmp)
+            DeleteDC(headMemDC)
+        ELSE
+            POINTER pGraphics = NULL, pBrush = NULL
+            GdipCreateFromHDC(memDC, &pGraphics)
+            IF pGraphics <> NULL THEN
+                GpPointF hPtStart, hPtEnd
+                hPtStart.X = 0.0 : hPtStart.Y = 0.0
+                hPtEnd.X = IIF(#<ENHANCED_LABEL>pCtrl.headerGradVertical, 0.0, width)
+                hPtEnd.Y = IIF(#<ENHANCED_LABEL>pCtrl.headerGradVertical, #<ENHANCED_LABEL>pCtrl.headerHeight, 0.0)
+                UINT col1 = ToGdiPlusColor(#<ENHANCED_LABEL>pCtrl.headerGradColor1)
+                UINT col2 = ToGdiPlusColor(#<ENHANCED_LABEL>pCtrl.headerGradColor2)
+                GdipCreateLineBrush(&hPtStart, &hPtEnd, col1, col2, WrapModeTile, &pBrush)
+                IF pBrush <> NULL THEN
+                    GdipFillRectangle(pGraphics, pBrush, 0.0, 0.0, width, #<ENHANCED_LABEL>pCtrl.headerHeight)
+                    GdipDeleteBrush(pBrush)
+                ENDIF
+                GdipDeleteGraphics(pGraphics)
+            ENDIF
+        ENDIF
+
+        IF #<ENHANCED_LABEL>pCtrl.isHovered == TRUE AND #<ENHANCED_LABEL>pCtrl.enableHighlight == TRUE THEN
+            INT hStyle = #<ENHANCED_LABEL>pCtrl.headerHighlightStyle
+            UINT hlColor = #<ENHANCED_LABEL>pCtrl.highlightBorderColor
+            IF hStyle == EL_HIGHLIGHT_BG_ONLY OR hStyle == EL_HIGHLIGHT_BORDER_BG OR hStyle == EL_HIGHLIGHT_BG_TEXT THEN
+                WINRECT rcHeadBg
+                rcHeadBg.left = 0 : rcHeadBg.top = 0 : rcHeadBg.right = width : rcHeadBg.bottom = #<ENHANCED_LABEL>pCtrl.headerHeight
+                UINT hHlBrush = CreateSolidBrush(RGB(30, 58, 138))
+                FillRect(memDC, &rcHeadBg, hHlBrush)
+                DeleteObject(hHlBrush)
+            ENDIF
+            IF hStyle == EL_HIGHLIGHT_BORDER_ONLY OR hStyle == EL_HIGHLIGHT_BORDER_BG OR hStyle == EL_HIGHLIGHT_BORDER_TEXT THEN
+                UINT hHlPen = CreatePen(0, 2, hlColor)
+                UINT hOldHlPen = SelectObject(memDC, hHlPen)
+                UINT hOldHlBr = SelectObject(memDC, GetStockObject(5))
+                Rectangle(memDC, 0, 0, width, #<ENHANCED_LABEL>pCtrl.headerHeight)
+                SelectObject(memDC, hOldHlPen)
+                SelectObject(memDC, hOldHlBr)
+                DeleteObject(hHlPen)
+            ELSEIF hStyle == EL_HIGHLIGHT_LEFT_BORDER_ONLY THEN
+                UINT hLeftPen = CreatePen(0, 3, hlColor)
+                UINT hOldLPen = SelectObject(memDC, hLeftPen)
+                MoveToEx(memDC, 0, 0, NULL)
+                LineToWin32(memDC, 0, #<ENHANCED_LABEL>pCtrl.headerHeight)
+                SelectObject(memDC, hOldLPen)
+                DeleteObject(hLeftPen)
+            ELSEIF hStyle == EL_HIGHLIGHT_BOTTOM_BORDER_ONLY THEN
+                UINT hBotPen = CreatePen(0, 3, hlColor)
+                UINT hOldBPen = SelectObject(memDC, hBotPen)
+                MoveToEx(memDC, 0, #<ENHANCED_LABEL>pCtrl.headerHeight - 1, NULL)
+                LineToWin32(memDC, width, #<ENHANCED_LABEL>pCtrl.headerHeight - 1)
+                SelectObject(memDC, hOldBPen)
+                DeleteObject(hBotPen)
+            ENDIF
+        ENDIF
+
+        INT textLeftMargin = #<ENHANCED_LABEL>pCtrl.headerIndentX + 5
+        
+        POINTER pGpHIcon = #<ENHANCED_LABEL>pCtrl.pHeaderGpImage
+        IF pGpHIcon <> NULL THEN
+            INT gpW = IIF(#<ENHANCED_LABEL>pCtrl.headerGpWidth <= 0, 20, #<ENHANCED_LABEL>pCtrl.headerGpWidth)
+            INT gpH = IIF(#<ENHANCED_LABEL>pCtrl.headerGpHeight <= 0, 20, #<ENHANCED_LABEL>pCtrl.headerGpHeight)
+            INT gpY = (#<ENHANCED_LABEL>pCtrl.headerHeight - gpH) / 2
+            INT gpX = #<ENHANCED_LABEL>pCtrl.headerIndentX + 6
+            POINTER pGfxHead = NULL
+            GdipCreateFromHDC(memDC, &pGfxHead)
+            IF pGfxHead <> NULL THEN
+                GdipDrawImageRectI(pGfxHead, pGpHIcon, gpX, gpY, gpW, gpH)
+                GdipDeleteGraphics(pGfxHead)
+            ENDIF
+            textLeftMargin = gpX + gpW + 6
+        ELSEIF #<ENHANCED_LABEL>pCtrl.hHeaderIcon <> 0 THEN
+            INT iconY = (#<ENHANCED_LABEL>pCtrl.headerHeight - #<ENHANCED_LABEL>pCtrl.iconHeight) / 2
+            INT iconX = #<ENHANCED_LABEL>pCtrl.headerIndentX + 6
+            DrawIconEx(memDC, iconX, iconY, #<ENHANCED_LABEL>pCtrl.hHeaderIcon, #<ENHANCED_LABEL>pCtrl.iconWidth, #<ENHANCED_LABEL>pCtrl.iconHeight, 0, NULL, 3)
+            textLeftMargin = iconX + #<ENHANCED_LABEL>pCtrl.iconWidth + 6
+        ENDIF
+
+        IF #<ENHANCED_LABEL>pCtrl.useDualHeader == TRUE THEN
+            SetBkMode(memDC, 1)
+            IF LEN(#<ENHANCED_LABEL>pCtrl.headerTitle) > 0 THEN
+                SetTextColor(memDC, #<ENHANCED_LABEL>pCtrl.headerTextColor)
+                UINT hOldFont = SelectObject(memDC, IIF(#<ENHANCED_LABEL>pCtrl.hHeaderFont <> 0, #<ENHANCED_LABEL>pCtrl.hHeaderFont, GetStockObject(17)))
+                WINRECT rcTitle
+                rcTitle.left = textLeftMargin : rcTitle.top = 3 : rcTitle.right = width - 5 : rcTitle.bottom = 21
+                DrawTextW(memDC, &#<ENHANCED_LABEL>pCtrl.headerTitle, -1, &rcTitle, 0x00000020 | #<ENHANCED_LABEL>pCtrl.headerAlignment)
+                SelectObject(memDC, hOldFont)
+            ENDIF
+            IF LEN(#<ENHANCED_LABEL>pCtrl.headerDesc) > 0 THEN
+                SetTextColor(memDC, #<ENHANCED_LABEL>pCtrl.headerDescTextColor)
+                UINT hOldDescFont = SelectObject(memDC, IIF(#<ENHANCED_LABEL>pCtrl.hHeaderDescFont <> 0, #<ENHANCED_LABEL>pCtrl.hHeaderDescFont, GetStockObject(17)))
+                WINRECT rcDesc
+                rcDesc.left = textLeftMargin : rcDesc.top = 22 : rcDesc.right = width - 5 : rcDesc.bottom = 38
+                DrawTextW(memDC, &#<ENHANCED_LABEL>pCtrl.headerDesc, -1, &rcDesc, 0x00000020 | #<ENHANCED_LABEL>pCtrl.headerDescAlignment)
+                SelectObject(memDC, hOldDescFont)
+            ENDIF
+        ELSE
+            IF LEN(#<ENHANCED_LABEL>pCtrl.headerTitle) > 0 THEN
+                SetBkMode(memDC, 1)
+                SetTextColor(memDC, #<ENHANCED_LABEL>pCtrl.headerTextColor)
+                UINT hOldFont2Init = SelectObject(memDC, IIF(#<ENHANCED_LABEL>pCtrl.hHeaderFont <> 0, #<ENHANCED_LABEL>pCtrl.hHeaderFont, GetStockObject(17)))
+                WINRECT rcText
+                rcText.left = textLeftMargin : rcText.top = #<ENHANCED_LABEL>pCtrl.headerIndentY : rcText.right = width - 5 : rcText.bottom = #<ENHANCED_LABEL>pCtrl.headerHeight
+                DrawTextW(memDC, &#<ENHANCED_LABEL>pCtrl.headerTitle, -1, &rcText, 0x00000020 | 0x00000004 | #<ENHANCED_LABEL>pCtrl.headerAlignment)
+                SelectObject(memDC, hOldFont2Init)
+            ENDIF
+        ENDIF
+    ENDIF
+
+    ' 3. Link Bar Strip Pass
+    IF #<ENHANCED_LABEL>pCtrl.useLinkBar == TRUE AND linkBarHeight > 0 AND #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE THEN
+        INT barTop = height - linkBarHeight
+        POINTER pBarGfx = NULL, pBarBrush = NULL
+        GdipCreateFromHDC(memDC, &pBarGfx)
+        IF pBarGfx <> NULL THEN
+            GpPointF barStart, barEnd
+            barStart.X = 0.0 : barStart.Y = barTop
+            barEnd.X = IIF(#<ENHANCED_LABEL>pCtrl.linkBarGradVertical, 0.0, width)
+            barEnd.Y = IIF(#<ENHANCED_LABEL>pCtrl.linkBarGradVertical, height, barTop)
+            UINT bCol1 = ToGdiPlusColor(#<ENHANCED_LABEL>pCtrl.linkBarGradColor1)
+            UINT bCol2 = ToGdiPlusColor(#<ENHANCED_LABEL>pCtrl.linkBarGradColor2)
+            GdipCreateLineBrush(&barStart, &barEnd, bCol1, bCol2, WrapModeTile, &pBarBrush)
+            IF pBarBrush <> NULL THEN
+                GdipFillRectangle(pBarGfx, pBarBrush, 0.0, barTop, width, linkBarHeight)
+                GdipDeleteBrush(pBarBrush)
+            ENDIF
+            GdipDeleteGraphics(pBarGfx)
+        ENDIF
+
+        UINT hBarPen = CreatePen(0, 1, RGB(51, 65, 85))
+        UINT hOldBarPen = SelectObject(memDC, hBarPen)
+        MoveToEx(memDC, 0, barTop, NULL)
+        LineToWin32(memDC, width, barTop)
+        SelectObject(memDC, hOldBarPen)
+        DeleteObject(hBarPen)
+
+        FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkBarCount - 1
+            INT barItemIndent = #<ENHANCED_LABEL>pCtrl.linkBars[i].indent
+            WINRECT rcBarItem
+            rcBarItem.left = barItemIndent
+            rcBarItem.top = barTop + 4
+            rcBarItem.right = barItemIndent + 90
+            rcBarItem.bottom = height - 4
+            
+            #<ENHANCED_LABEL>pCtrl.linkBars[i].rcBounds = rcBarItem
+
+            UINT bTextColor = IIF(i == #<ENHANCED_LABEL>pCtrl.pressedBarIndex, RGB(56, 189, 248), IIF(i == #<ENHANCED_LABEL>pCtrl.hoveredBarIndex, #<ENHANCED_LABEL>pCtrl.linkBars[i].highlight, #<ENHANCED_LABEL>pCtrl.linkBars[i].textColor))
+            SetBkMode(memDC, 1)
+            SetTextColor(memDC, bTextColor)
+            UINT hBarFont = IIF(#<ENHANCED_LABEL>pCtrl.hLinkFont <> 0, #<ENHANCED_LABEL>pCtrl.hLinkFont, GetStockObject(17))
+            UINT hOldBarFont = SelectObject(memDC, hBarFont)
+            DrawTextW(memDC, &#<ENHANCED_LABEL>pCtrl.linkBars[i].text, -1, &rcBarItem, 0x00000424)
+            SelectObject(memDC, hOldBarFont)
+        NEXT i
+    ENDIF
+
+    ' 4. Links Grid & Full-Width Soft Metallic Category Headers
+    IF #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE THEN
+        INT linkDcState = SaveDC(memDC)
+        IntersectClipRect(memDC, 0, bodyTop, width, height - linkBarHeight)
+        INT startY = #<ENHANCED_LABEL>pCtrl.headerHeight + 10
+        numCols = IIF(#<ENHANCED_LABEL>pCtrl.linkColumns < 1, 1, #<ENHANCED_LABEL>pCtrl.linkColumns)
+        INT colW = IIF(#<ENHANCED_LABEL>pCtrl.linkColWidth <= 0, 180, #<ENHANCED_LABEL>pCtrl.linkColWidth)
+        INT gapX = #<ENHANCED_LABEL>pCtrl.linkColGapX
+        gapY = #<ENHANCED_LABEL>pCtrl.linkRowGapY
+        itemHeight = 28
+        INT scrollY = #<ENHANCED_LABEL>pCtrl.scrollOffset
+        INT visibleItemRow = 0
+
+        isCatCollapsed = FALSE
+
+        FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkCount - 1
+            IF #<ENHANCED_LABEL>pCtrl.links[i].isCategoryHeader THEN
+                isCatCollapsed = #<ENHANCED_LABEL>pCtrl.links[i].isCategoryCollapsed
+                isChildOfCollapsed = FALSE
+            ELSE
+                isChildOfCollapsed = isCatCollapsed
+            ENDIF
+
+            IF isChildOfCollapsed THEN
+                #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.left = 0
+                #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.top = 0
+                #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.right = 0
+                #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.bottom = 0
+            ELSE
+                INT cIdx = visibleItemRow / numCols
+                INT rowY = startY + (cIdx * (itemHeight + gapY)) - scrollY
+
+                IF #<ENHANCED_LABEL>pCtrl.links[i].isCategoryHeader THEN
+                    #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.left = 0
+                    #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.top = rowY
+                    #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.right = width
+                    #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.bottom = rowY + itemHeight
+
+                    IF i == #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex THEN
+                        UINT hCatGlowPen = CreatePen(0, 1, #<ENHANCED_LABEL>pCtrl.links[i].highlight)
+                        UINT hOldCatGlowPen = SelectObject(memDC, hCatGlowPen)
+                        UINT hOldCatGlowBr = SelectObject(memDC, GetStockObject(5))
+                        Rectangle(memDC, 0, rowY, width, rowY + itemHeight)
+                        SelectObject(memDC, hOldCatGlowPen)
+                        SelectObject(memDC, hOldCatGlowBr)
+                        DeleteObject(hCatGlowPen)
+                    ENDIF
+
+                    POINTER pCatGfx = NULL, pCatBrush = NULL
+                    GdipCreateFromHDC(memDC, &pCatGfx)
+                    IF pCatGfx <> NULL THEN
+                        GpPointF catStart, catEnd
+                        catStart.X = 0.0 : catStart.Y = rowY
+                        catEnd.X = 0.0 : catEnd.Y = rowY + itemHeight
+                        
+                        UINT catCol1 = ToGdiPlusColor(#<ENHANCED_LABEL>pCtrl.links[i].bgHighlight)
+                        UINT catCol2 = ToGdiPlusColor(#<ENHANCED_LABEL>pCtrl.bodyBgColor)
+                        
+                        GdipCreateLineBrush(&catStart, &catEnd, catCol1, catCol2, WrapModeTile, &pCatBrush)
+                        IF pCatBrush <> NULL THEN
+                            GdipFillRectangle(pCatGfx, pCatBrush, 0.0, rowY + 1, width, itemHeight - 2)
+                            GdipDeleteBrush(pCatBrush)
+                        ENDIF
+                        GdipDeleteGraphics(pCatGfx)
+                    ENDIF
+
+                    UINT hCatPen = CreatePen(0, 1, #<ENHANCED_LABEL>pCtrl.themeScrollThumbColor)
+                    UINT hOldCatPen = SelectObject(memDC, hCatPen)
+                    MoveToEx(memDC, 0, rowY, NULL)
+                    LineToWin32(memDC, width, rowY)
+                    MoveToEx(memDC, 0, rowY + itemHeight - 1, NULL)
+                    LineToWin32(memDC, width, rowY + itemHeight - 1)
+                    SelectObject(memDC, hOldCatPen)
+                    DeleteObject(hCatPen)
+
+                    POINTER pCatArrowImg = #<ENHANCED_LABEL>pCtrl.links[i].pGpImage
+                    INT arrowX = 12
+                    INT arrowY = rowY + ((itemHeight - 12) / 2)
+
+                    IF pCatArrowImg <> NULL THEN
+                        POINTER pGfxArrow = NULL
+                        GdipCreateFromHDC(memDC, &pGfxArrow)
+                        IF pGfxArrow <> NULL THEN
+                            GdipDrawImageRectI(pGfxArrow, pCatArrowImg, arrowX, arrowY, 12, 12)
+                            GdipDeleteGraphics(pGfxArrow)
+                        ENDIF
+                    ELSE
+                        UINT arrowColor = IIF(i == #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex, #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor, #<ENHANCED_LABEL>pCtrl.links[i].textColor)
+                        UINT hArrowPen = CreatePen(0, 2, arrowColor)
+                        UINT hOldAPen = SelectObject(memDC, hArrowPen)
+                        IF #<ENHANCED_LABEL>pCtrl.links[i].isCategoryCollapsed THEN
+                            MoveToEx(memDC, arrowX + 3, arrowY + 1, NULL)
+                            LineToWin32(memDC, arrowX + 8, arrowY + 6)
+                            LineToWin32(memDC, arrowX + 3, arrowY + 11)
+                        ELSE
+                            MoveToEx(memDC, arrowX + 1, arrowY + 3, NULL)
+                            LineToWin32(memDC, arrowX + 6, arrowY + 8)
+                            LineToWin32(memDC, arrowX + 11, arrowY + 3)
+                        ENDIF
+                        SelectObject(memDC, hOldAPen)
+                        DeleteObject(hArrowPen)
+                    ENDIF
+
+                    WINRECT rcCatText
+                    rcCatText.left = 32
+                    rcCatText.top = rowY
+                    rcCatText.right = width - 10
+                    rcCatText.bottom = rowY + itemHeight
+
+                    UINT catTextColor = IIF(i == #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex, #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor, #<ENHANCED_LABEL>pCtrl.links[i].textColor)
+                    UINT hCatFont = IIF(#<ENHANCED_LABEL>pCtrl.hHeaderFont <> 0, #<ENHANCED_LABEL>pCtrl.hHeaderFont, GetStockObject(17))
+                    
+                    hOldFont2 = SelectObject(memDC, hCatFont)
+                    SetBkMode(memDC, 1)
+                    SetTextColor(memDC, catTextColor)
+                    DrawTextW(memDC, &#<ENHANCED_LABEL>pCtrl.links[i].text, -1, &rcCatText, 0x00000025)
+                    SelectObject(memDC, hOldFont2)
+                ELSE
+                    INT rIdx = visibleItemRow % numCols
+                    INT colX = 20 + (rIdx * (colW + gapX)) + #<ENHANCED_LABEL>pCtrl.links[i].indent
+                    
+                    #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.left = colX
+                    #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.top = rowY
+                    #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.right = colX + colW
+                    #<ENHANCED_LABEL>pCtrl.links[i].rcBounds.bottom = rowY + itemHeight
+                    
+                    WINRECT rcItem = #<ENHANCED_LABEL>pCtrl.links[i].rcBounds
+
+                    UINT curTextColor = IIF(i == #<ENHANCED_LABEL>pCtrl.pressedLinkIndex, RGB(56, 189, 248), IIF(i == #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex, #<ENHANCED_LABEL>pCtrl.links[i].highlight, #<ENHANCED_LABEL>pCtrl.links[i].textColor))
+                    UINT curBgColor = IIF(i == #<ENHANCED_LABEL>pCtrl.pressedLinkIndex, RGB(15, 23, 42), #<ENHANCED_LABEL>pCtrl.links[i].bgHighlight)
+
+                    INT dcState = SaveDC(memDC)
+                    IF i == #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex AND #<ENHANCED_LABEL>pCtrl.enableLinkGlow == TRUE THEN
+                        WINRECT rcGlow
+                        rcGlow.left = rcItem.left - 2
+                        rcGlow.top = rcItem.top - 2
+                        rcGlow.right = rcItem.right + 2
+                        rcGlow.bottom = rcItem.bottom + 2
+                        
+                        UINT hGlowPen = CreatePen(0, 2, #<ENHANCED_LABEL>pCtrl.linkGlowColor)
+                        UINT hOldGlowPen = SelectObject(memDC, hGlowPen)
+                        UINT hOldGlowBr = SelectObject(memDC, GetStockObject(5))
+                        Rectangle(memDC, rcGlow.left, rcGlow.top, rcGlow.right, rcGlow.bottom)
+                        SelectObject(memDC, hOldGlowPen)
+                        SelectObject(memDC, hOldGlowBr)
+                        DeleteObject(hGlowPen)
+                    ENDIF
+
+                    IF curBgColor <> 0xFFFFFFFF THEN
+                        UINT hLinkBrush = CreateSolidBrush(curBgColor)
+                        FillRect(memDC, &rcItem, hLinkBrush)
+                        DeleteObject(hLinkBrush)
+                    ENDIF
+
+                    UINT hLinkPen = CreatePen(0, 1, curTextColor)
+                    hOldPen = SelectObject(memDC, hLinkPen)
+                    hOldBr  = SelectObject(memDC, GetStockObject(5))
+                    Rectangle(memDC, rcItem.left, rcItem.top, rcItem.right, rcItem.bottom)
+                    SelectObject(memDC, hOldPen)
+                    SelectObject(memDC, hOldBr)
+                    DeleteObject(hLinkPen)
+
+                    WINRECT rcLinkText = rcItem
+                    
+                    POINTER pGpImg = #<ENHANCED_LABEL>pCtrl.links[i].pGpImage
+                    UINT hBmpIcon = #<ENHANCED_LABEL>pCtrl.links[i].hBitmap
+                    UINT dtFlags = 0x00000025
+
+                    IF pGpImg <> NULL THEN
+                        INT imgW = IIF(#<ENHANCED_LABEL>pCtrl.links[i].imgWidth <= 0, 16, #<ENHANCED_LABEL>pCtrl.links[i].imgWidth)
+                        INT imgH = IIF(#<ENHANCED_LABEL>pCtrl.links[i].imgHeight <= 0, 16, #<ENHANCED_LABEL>pCtrl.links[i].imgHeight)
+                        INT imgX = rcItem.left + 8
+                        INT imgY = rcItem.top + ((itemHeight - imgH) / 2)
+
+                        POINTER pGfxLink = NULL
+                        GdipCreateFromHDC(memDC, &pGfxLink)
+                        IF pGfxLink <> NULL THEN
+                            GdipDrawImageRectI(pGfxLink, pGpImg, imgX, imgY, imgW, imgH)
+                            GdipDeleteGraphics(pGfxLink)
+                        ENDIF
+                        rcLinkText.left = imgX + imgW + 8
+                        dtFlags = 0x00000024
+                    ELSEIF hBmpIcon <> 0 THEN
+                        INT bmpX = rcItem.left + 8
+                        INT bmpY = rcItem.top + ((itemHeight - 16) / 2)
+                        DrawIconEx(memDC, bmpX, bmpY, hBmpIcon, 16, 16, 0, NULL, 3)
+                        rcLinkText.left = bmpX + 16 + 8
+                        dtFlags = 0x00000024
+                    ENDIF
+
+                    UINT hActiveFont = IIF(#<ENHANCED_LABEL>pCtrl.hLinkFont <> 0, #<ENHANCED_LABEL>pCtrl.hLinkFont, GetStockObject(17))
+                    hOldFont2 = SelectObject(memDC, hActiveFont)
+                    SetBkMode(memDC, 1)
+                    SetTextColor(memDC, curTextColor)
+                    DrawTextW(memDC, &#<ENHANCED_LABEL>pCtrl.links[i].text, -1, &rcLinkText, dtFlags)
+                    SelectObject(memDC, hOldFont2)
+                    RestoreDC(memDC, dcState)
+                ENDIF
+
+                visibleItemRow = visibleItemRow + 1
+            ENDIF
+        NEXT i
+        RestoreDC(memDC, linkDcState)
+
+        totalRows = (visibleItemRow + numCols - 1) / numCols
+        contentH = totalRows * (itemHeight + gapY) + 20
+        maxScroll = contentH - bodyH
+        IF maxScroll > 0 THEN
+            INT scrollBarX = width - 8
+            INT scrollBarY = bodyTop + 6
+            trackH = bodyH - 12
+            
+            UINT hTrackBrush = CreateSolidBrush(#<ENHANCED_LABEL>pCtrl.themeScrollTrackColor)
+            WINRECT rcTrack
+            rcTrack.left = scrollBarX
+            rcTrack.top = scrollBarY
+            rcTrack.right = scrollBarX + 5
+            rcTrack.bottom = scrollBarY + trackH
+            FillRect(memDC, &rcTrack, hTrackBrush)
+            DeleteObject(hTrackBrush)
+
+            thumbH = IIF((bodyH * trackH) / contentH < 24, 24, (bodyH * trackH) / contentH)
+            IF thumbH > trackH THEN thumbH = trackH
+            availTrack = IIF(trackH - thumbH < 1, 1, trackH - thumbH)
+            INT thumbY = scrollBarY + (#<ENHANCED_LABEL>pCtrl.scrollOffset * availTrack) / maxScroll
+            
+            UINT hThumbBrush = CreateSolidBrush(#<ENHANCED_LABEL>pCtrl.themeScrollThumbColor)
+            WINRECT rcThumb
+            rcThumb.left = scrollBarX
+            rcThumb.top = thumbY
+            rcThumb.right = scrollBarX + 5
+            rcThumb.bottom = thumbY + thumbH
+            FillRect(memDC, &rcThumb, hThumbBrush)
+            DeleteObject(hThumbBrush)
+        ENDIF
+    ENDIF
+
+    ' Focus Ring
+    ' Draw focus outline around active item when control has keyboard focus
+    IF GetFocus() == #<ENHANCED_LABEL>pCtrl.hwndCtrl THEN
+        INT focusIdx = #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex
+        IF focusIdx >= 0 AND focusIdx < #<ENHANCED_LABEL>pCtrl.linkCount THEN
+            WINRECT rcFocus = #<ENHANCED_LABEL>pCtrl.links[focusIdx].rcBounds
+            IF rcFocus.right > rcFocus.left THEN
+                DrawFocusRect(memDC, &rcFocus)
+            ENDIF
+        ENDIF
+    ENDIF
+
+    ' Blit frame to target DC
+    BitBlt(hdcTarget, 0, 0, width, height, memDC, 0, 0, 0x00CC0020)
+
+    SelectObject(memDC, hOldBmp)
+    DeleteObject(hBmp)
+    DeleteDC(memDC)
+ENDSUB
+
+SUB EL_CustomClassProc(hwnd:UINT, uMsg:UINT, wp:WPARAM, lp:LPARAM), INT
+    POINTER pData = GetPropA(hwnd, "EL_pData")
+    POINTER pCtrl
+    pCtrl = pData
+
+    INT targetH, currentH, animStep, i, x, y, bodyTop, linkBarHeight, bodyH
+    INT numCols, itemHeight, gapY, totalRows, contentH, maxScroll
+    INT trackH, thumbH, availTrack
+    UINT hParent
+    POINT pt
+    WINRECT rcClient
+
+    UINT hParentWin
+    UINT cmdID
+    INT vkCode, curIdx, total
+    INT targetCatID
+
+    SELECT uMsg
+        CASE 0x0087 ' WM_GETDLGCODE
+            RETURN 0x0083
+
+        CASE 0x0007 ' WM_SETFOCUS
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+            RETURN 0
+
+        CASE 0x0008 ' WM_KILLFOCUS
+            HideCustomTooltip(pData)
+            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+            RETURN 0
+
+        CASE 0x0100 ' WM_KEYDOWN
+            IF pCtrl <> NULL AND #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE THEN
+                vkCode = wp
+                curIdx = #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex
+                total  = #<ENHANCED_LABEL>pCtrl.linkCount
+
+                SELECT vkCode
+                    CASE 0x09 ' VK_TAB
+                        IF total > 0 THEN
+                            INT shiftPressed = GetKeyState(0x10) & 0x8000
+                            IF shiftPressed THEN
+                                curIdx = curIdx - 1
+                                IF curIdx < 0 THEN curIdx = total - 1
+                            ELSE
+                                curIdx = (curIdx + 1) % total
+                            ENDIF
+                            #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex = curIdx
+                            
+                            ' --- Auto-scroll keyboard selection into view ---
+                            IF curIdx >= 0 AND curIdx < total THEN
+                                WINRECT rcItem = #<ENHANCED_LABEL>pCtrl.links[curIdx].rcBounds
+                                INT itemTop = rcItem.top
+                                bodyTop = #<ENHANCED_LABEL>pCtrl.headerHeight
+                                IF itemTop < bodyTop THEN
+                                    #<ENHANCED_LABEL>pCtrl.scrollOffset = #<ENHANCED_LABEL>pCtrl.scrollOffset - (bodyTop - itemTop)
+                                    IF #<ENHANCED_LABEL>pCtrl.scrollOffset < 0 THEN #<ENHANCED_LABEL>pCtrl.scrollOffset = 0
+                                ENDIF
+                            ENDIF
+
+                            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                        ENDIF
+                        RETURN 0
+
+                    CASE 0x26 ' VK_UP
+                        IF total > 0 THEN
+                            curIdx = curIdx - 1
+                            IF curIdx < 0 THEN curIdx = total - 1
+                            #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex = curIdx
+                            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                        ENDIF
+                        RETURN 0
+
+                    CASE 0x28 ' VK_DOWN
+                        IF total > 0 THEN
+                            curIdx = (curIdx + 1) % total
+                            #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex = curIdx
+                            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                        ENDIF
+                        RETURN 0
+
+                    CASE 0x0D ' VK_RETURN
+                        IF curIdx >= 0 AND curIdx < total THEN
+                            IF #<ENHANCED_LABEL>pCtrl.links[curIdx].isCategoryHeader THEN
+                                EL_ToggleCategory(pData, #<ENHANCED_LABEL>pCtrl.links[curIdx].categoryID)
+                            ELSE
+                                cmdID = #<ENHANCED_LABEL>pCtrl.links[curIdx].cmdID
+                                hParentWin = GetParent(hwnd)
+                                IF hParentWin <> 0 THEN PostMessageA(hParentWin, 0x0111, cmdID, hwnd)
+                            ENDIF
+                        ENDIF
+                    CASE 0x20 ' VK_SPACE
+                        IF curIdx >= 0 AND curIdx < total THEN
+                            IF #<ENHANCED_LABEL>pCtrl.links[curIdx].isCategoryHeader THEN
+                                EL_ToggleCategory(pData, #<ENHANCED_LABEL>pCtrl.links[curIdx].categoryID)
+                            ELSE
+                                cmdID = #<ENHANCED_LABEL>pCtrl.links[curIdx].cmdID
+                                hParentWin = GetParent(hwnd)
+                                IF hParentWin <> 0 THEN PostMessageA(hParentWin, 0x0111, cmdID, hwnd)
+                            ENDIF
+                        ENDIF
+                        RETURN 0
+                ENDSELECT
+            ENDIF
+            RETURN 0
+
+        CASE 0x020A ' WM_MOUSEWHEEL
+            IF pCtrl <> NULL AND #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE THEN
+                INT zDelta = (SWORD)HIWORD(wp)
+                INT currentScroll = #<ENHANCED_LABEL>pCtrl.scrollOffset
+                bodyTop = #<ENHANCED_LABEL>pCtrl.headerHeight
+                linkBarHeight = IIF(#<ENHANCED_LABEL>pCtrl.useLinkBar == TRUE, #<ENHANCED_LABEL>pCtrl.linkBarHeight, 0)
+                GetClientRect(hwnd, &rcClient)
+                bodyH = rcClient.bottom - bodyTop - linkBarHeight
+                numCols = IIF(#<ENHANCED_LABEL>pCtrl.linkColumns < 1, 1, #<ENHANCED_LABEL>pCtrl.linkColumns)
+                itemHeight = 28 : gapY = #<ENHANCED_LABEL>pCtrl.linkRowGapY
+                totalRows = (#<ENHANCED_LABEL>pCtrl.linkCount + numCols - 1) / numCols
+                contentH = totalRows * (itemHeight + gapY) + 20
+                maxScroll = contentH - bodyH
+                IF maxScroll < 0 THEN maxScroll = 0
+                currentScroll = currentScroll - (zDelta / 120) * 24
+                IF currentScroll < 0 THEN currentScroll = 0
+                IF currentScroll > maxScroll THEN currentScroll = maxScroll
+                #<ENHANCED_LABEL>pCtrl.scrollOffset = currentScroll
+                RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+            ENDIF
+            RETURN 0
+
+        CASE 0x0200 ' WM_MOUSEMOVE
+            IF pCtrl <> NULL THEN
+                x = LOWORD(lp) : y = HIWORD(lp)
+                IF #<ENHANCED_LABEL>pCtrl.isDraggingThumb == TRUE THEN
+                    bodyTop = #<ENHANCED_LABEL>pCtrl.headerHeight
+                    linkBarHeight = IIF(#<ENHANCED_LABEL>pCtrl.useLinkBar == TRUE, #<ENHANCED_LABEL>pCtrl.linkBarHeight, 0)
+                    GetClientRect(hwnd, &rcClient)
+                    bodyH = rcClient.bottom - bodyTop - linkBarHeight
+                    numCols = IIF(#<ENHANCED_LABEL>pCtrl.linkColumns < 1, 1, #<ENHANCED_LABEL>pCtrl.linkColumns)
+                    itemHeight = 28 : gapY = #<ENHANCED_LABEL>pCtrl.linkRowGapY
+                    totalRows = (#<ENHANCED_LABEL>pCtrl.linkCount + numCols - 1) / numCols
+                    contentH = totalRows * (itemHeight + gapY) + 20
+                    maxScroll = contentH - bodyH
+                    IF maxScroll < 0 THEN maxScroll = 0
+                    trackH = bodyH - 12
+                    thumbH = (bodyH * trackH) / contentH
+                    IF thumbH < 24 THEN thumbH = 24
+                    IF thumbH > trackH THEN thumbH = trackH
+                    INT dragDelta = y - #<ENHANCED_LABEL>pCtrl.dragStartY
+                    availTrack = IIF(trackH - thumbH < 1, 1, trackH - thumbH)
+                    INT newScroll = #<ENHANCED_LABEL>pCtrl.dragStartOffset + (dragDelta * maxScroll) / availTrack
+                    IF newScroll < 0 THEN newScroll = 0
+                    IF newScroll > maxScroll THEN newScroll = maxScroll
+                    #<ENHANCED_LABEL>pCtrl.scrollOffset = newScroll
+                    RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                    RETURN 0
+                ENDIF
+
+                GetClientRect(hwnd, &rcClient)
+                INT inContainer = (x >= 0 AND x <= rcClient.right AND y >= 0 AND y <= rcClient.bottom)
+                IF inContainer <> #<ENHANCED_LABEL>pCtrl.isHovered THEN
+                    #<ENHANCED_LABEL>pCtrl.isHovered = inContainer
+                    IF #<ENHANCED_LABEL>pCtrl.enableHighlight THEN RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                ENDIF
+                
+                INT newBarHover = -1
+                linkBarHeight = IIF(#<ENHANCED_LABEL>pCtrl.useLinkBar == TRUE, #<ENHANCED_LABEL>pCtrl.linkBarHeight, 0)
+                IF #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE AND linkBarHeight > 0 AND y >= (rcClient.bottom - linkBarHeight) THEN
+                    FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkBarCount - 1
+                        WINRECT rcBCheck = #<ENHANCED_LABEL>pCtrl.linkBars[i].rcBounds
+                        IF x >= rcBCheck.left AND x <= rcBCheck.right AND y >= rcBCheck.top AND y <= rcBCheck.bottom THEN
+                            newBarHover = i : BREAKFOR
+                        ENDIF
+                    NEXT i
+                ENDIF
+                
+                IF newBarHover <> #<ENHANCED_LABEL>pCtrl.hoveredBarIndex THEN
+                    #<ENHANCED_LABEL>pCtrl.hoveredBarIndex = newBarHover
+                    IF newBarHover <> -1 THEN
+                        SetCursorA(LoadCursorA(NULL, 32649))
+                        IF LEN(#<ENHANCED_LABEL>pCtrl.linkBars[newBarHover].tips) > 0 THEN
+                            ShowCustomTooltip(pData, &#<ENHANCED_LABEL>pCtrl.linkBars[newBarHover].tips, x, y)
+                        ENDIF
+                    ELSE
+                        SetCursorA(LoadCursorA(NULL, 32512))
+                        HideCustomTooltip(pData)
+                    ENDIF
+                    RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                ENDIF
+
+                INT newHover = -1
+                IF #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE THEN
+                    FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkCount - 1
+                        WINRECT rcCheck = #<ENHANCED_LABEL>pCtrl.links[i].rcBounds
+                        IF rcCheck.right > rcCheck.left AND x >= rcCheck.left AND x <= rcCheck.right AND y >= rcCheck.top AND y <= rcCheck.bottom THEN
+                            newHover = i : BREAKFOR
+                        ENDIF
+                    NEXT i
+                ENDIF
+                
+                IF newHover <> #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex THEN
+                    #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex = newHover
+                    IF newHover <> -1 THEN
+                        SetCursorA(LoadCursorA(NULL, 32649))
+                        IF LEN(#<ENHANCED_LABEL>pCtrl.links[newHover].tips) > 0 THEN
+                            ShowCustomTooltip(pData, &#<ENHANCED_LABEL>pCtrl.links[newHover].tips, x, y)
+                        ELSE
+                            HideCustomTooltip(pData)
+                        ENDIF
+                    ELSEIF newBarHover == -1 THEN
+                        SetCursorA(LoadCursorA(NULL, 32512))
+                        HideCustomTooltip(pData)
+                    ENDIF
+                    RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                ELSEIF newHover <> -1 THEN
+                    IF LEN(#<ENHANCED_LABEL>pCtrl.links[newHover].tips) > 0 THEN
+                        ShowCustomTooltip(pData, &#<ENHANCED_LABEL>pCtrl.links[newHover].tips, x, y)
+                    ENDIF
+                ENDIF
+            ENDIF
+            RETURN 0
+
+        CASE 0x0201 ' WM_LBUTTONDOWN
+            IF pCtrl <> NULL THEN
+                SetFocusWin32(#<ENHANCED_LABEL>pCtrl.hwndCtrl) ' <-- to grab keyboard focus
+                HideCustomTooltip(pData)
+                x = LOWORD(lp) : y = HIWORD(lp)
+                IF y <= #<ENHANCED_LABEL>pCtrl.headerHeight THEN
+                    IF #<ENHANCED_LABEL>pCtrl.headerCmdID <> 0 THEN
+                        hParentWin = GetParent(hwnd)
+                        IF hParentWin <> 0 THEN PostMessageA(hParentWin, 0x0111, #<ENHANCED_LABEL>pCtrl.headerCmdID, hwnd)
+                    ENDIF
+                    EL_ToggleCollapse(pData)
+                    RETURN 0
+                ENDIF
+                
+                linkBarHeight = IIF(#<ENHANCED_LABEL>pCtrl.useLinkBar == TRUE, #<ENHANCED_LABEL>pCtrl.linkBarHeight, 0)
+                GetClientRect(hwnd, &rcClient)
+                IF #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE AND linkBarHeight > 0 AND y >= (rcClient.bottom - linkBarHeight) THEN
+                    FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkBarCount - 1
+                        WINRECT rcBDown = #<ENHANCED_LABEL>pCtrl.linkBars[i].rcBounds
+                        IF x >= rcBDown.left AND x <= rcBDown.right AND y >= rcBDown.top AND y <= rcBDown.bottom THEN
+                            #<ENHANCED_LABEL>pCtrl.pressedBarIndex = i
+                            SetCapture(hwnd)
+                            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                            BREAKFOR
+                        ENDIF
+                    NEXT i
+                    RETURN 0
+                ENDIF
+
+                IF #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE THEN
+                    bodyTop = #<ENHANCED_LABEL>pCtrl.headerHeight
+                    bodyH = rcClient.bottom - bodyTop - linkBarHeight
+                    numCols = IIF(#<ENHANCED_LABEL>pCtrl.linkColumns < 1, 1, #<ENHANCED_LABEL>pCtrl.linkColumns)
+                    itemHeight = 28 : gapY = #<ENHANCED_LABEL>pCtrl.linkRowGapY
+                    totalRows = (#<ENHANCED_LABEL>pCtrl.linkCount + numCols - 1) / numCols
+                    contentH = totalRows * (itemHeight + gapY) + 20
+                    maxScroll = contentH - bodyH
+                    IF maxScroll > 0 AND x >= rcClient.right - 10 THEN
+                        #<ENHANCED_LABEL>pCtrl.isDraggingThumb = TRUE
+                        #<ENHANCED_LABEL>pCtrl.dragStartY = y
+                        #<ENHANCED_LABEL>pCtrl.dragStartOffset = #<ENHANCED_LABEL>pCtrl.scrollOffset
+                        SetCapture(hwnd)
+                        RETURN 0
+                    ENDIF
+                    FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkCount - 1
+                        WINRECT rcDown = #<ENHANCED_LABEL>pCtrl.links[i].rcBounds
+                        IF rcDown.right > rcDown.left AND x >= rcDown.left AND x <= rcDown.right AND y >= rcDown.top AND y <= rcDown.bottom THEN
+                            #<ENHANCED_LABEL>pCtrl.pressedLinkIndex = i
+                            SetCapture(hwnd)
+                            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                            BREAKFOR
+                        ENDIF
+                    NEXT i
+                ENDIF
+            ENDIF
+            RETURN 0
+
+        CASE 0x0202 ' WM_LBUTTONUP
+            IF pCtrl <> NULL THEN
+                IF GetCapture() == hwnd THEN ReleaseCapture()
+                IF #<ENHANCED_LABEL>pCtrl.isDraggingThumb == TRUE THEN
+                    #<ENHANCED_LABEL>pCtrl.isDraggingThumb = FALSE
+                    RETURN 0
+                ENDIF
+                
+                INT pressedBarIdx = #<ENHANCED_LABEL>pCtrl.pressedBarIndex
+                #<ENHANCED_LABEL>pCtrl.pressedBarIndex = -1
+                IF pressedBarIdx <> -1 THEN
+                    x = LOWORD(lp) : y = HIWORD(lp)
+                    WINRECT rcBUp = #<ENHANCED_LABEL>pCtrl.linkBars[pressedBarIdx].rcBounds
+                    IF x >= rcBUp.left AND x <= rcBUp.right AND y >= rcBUp.top AND y <= rcBUp.bottom THEN
+                        cmdID = #<ENHANCED_LABEL>pCtrl.linkBars[pressedBarIdx].cmdID
+                        hParentWin = GetParent(hwnd)
+                        IF hParentWin <> 0 THEN PostMessageA(hParentWin, 0x0111, cmdID, hwnd)
+                    ENDIF
+                    RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                    RETURN 0
+                ENDIF
+
+                INT pressedIdx = #<ENHANCED_LABEL>pCtrl.pressedLinkIndex
+                #<ENHANCED_LABEL>pCtrl.pressedLinkIndex = -1
+                IF pressedIdx <> -1 THEN
+                    x = LOWORD(lp) : y = HIWORD(lp)
+                    WINRECT rcUp = #<ENHANCED_LABEL>pCtrl.links[pressedIdx].rcBounds
+                    IF rcUp.right > rcUp.left AND x >= rcUp.left AND x <= rcUp.right AND y >= rcUp.top AND y <= rcUp.bottom THEN
+                        IF #<ENHANCED_LABEL>pCtrl.links[pressedIdx].isCategoryHeader THEN
+                            targetCatID = #<ENHANCED_LABEL>pCtrl.links[pressedIdx].categoryID
+                            #<ENHANCED_LABEL>pCtrl.links[pressedIdx].isCategoryCollapsed = NOT #<ENHANCED_LABEL>pCtrl.links[pressedIdx].isCategoryCollapsed
+                            RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                        ELSE
+                            cmdID = #<ENHANCED_LABEL>pCtrl.links[pressedIdx].cmdID
+                            hParentWin = GetParent(hwnd)
+                            IF hParentWin <> 0 THEN PostMessageA(hParentWin, 0x0111, cmdID, hwnd)
+                        ENDIF
+                    ENDIF
+                    RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+                ENDIF
+            ENDIF
+            RETURN 0
+
+        CASE 0x0113 ' WM_TIMER
+            IF pCtrl <> NULL THEN
+                targetH = IIF(#<ENHANCED_LABEL>pCtrl.isCollapsed, #<ENHANCED_LABEL>pCtrl.headerHeight, #<ENHANCED_LABEL>pCtrl.fullHeight)
+                currentH = #<ENHANCED_LABEL>pCtrl.animHeight
+                
+                INT distance = targetH - currentH
+                animStep = distance / 3
+                IF ABS(animStep) < 1 THEN animStep = IIF(distance < 0, -1, 1)
+                
+                currentH = currentH + animStep
+                
+                IF (distance > 0 AND currentH >= targetH) OR (distance < 0 AND currentH <= targetH) THEN
+                    currentH = targetH
+                    KillTimer(hwnd, EL_TIMER_ID)
+                    #<ENHANCED_LABEL>pCtrl.isAnimating = FALSE
+                    
+                    IF #<ENHANCED_LABEL>pCtrl.hSnapshotBmp <> 0 THEN
+                        DeleteObject(#<ENHANCED_LABEL>pCtrl.hSnapshotBmp)
+                        #<ENHANCED_LABEL>pCtrl.hSnapshotBmp = 0
+                    ENDIF
+                ENDIF
+                
+                #<ENHANCED_LABEL>pCtrl.animHeight = currentH
+                GetWindowRect(hwnd, &rcClient)
+                hParent = GetParent(hwnd)
+                pt.x = rcClient.left : pt.y = rcClient.top
+                IF hParent <> 0 THEN ScreenToClient(hParent, &pt)
+                
+                MoveWindow(hwnd, pt.x, pt.y, rcClient.right - rcClient.left, currentH, TRUE)
+                RedrawWindow(hwnd, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+            ENDIF
+            RETURN 0
+
+        CASE 0x000F ' WM_PAINT
+            IF pCtrl == NULL THEN RETURN DefWindowProcA(hwnd, uMsg, wp, lp)
+            PAINTSTRUCT ps
+            UINT hdc = BeginPaint(hwnd, &ps)
+            WINRECT rcPaint
+            GetClientRect(hwnd, &rcPaint)
+
+            IF #<ENHANCED_LABEL>pCtrl.isAnimating == TRUE AND #<ENHANCED_LABEL>pCtrl.hSnapshotBmp <> 0 THEN
+                UINT memDCAnim = CreateCompatibleDC(hdc)
+                UINT hOldBmpAnim = SelectObject(memDCAnim, #<ENHANCED_LABEL>pCtrl.hSnapshotBmp)
+                
+                BitBlt(hdc, 0, 0, rcPaint.right, rcPaint.bottom, memDCAnim, 0, 0, 0x00CC0020)
+                
+                SelectObject(memDCAnim, hOldBmpAnim)
+                DeleteDC(memDCAnim)
+            ELSE
+                EL_RenderToDC(pData, hdc, rcPaint.right, rcPaint.bottom)
+            ENDIF
+
+            EndPaint(hwnd, &ps)
+            RETURN 0
+
+        CASE 0x0002 ' WM_DESTROY
+            IF pCtrl <> NULL THEN
+                RemovePropA(hwnd, "EL_pData")
+                IF #<ENHANCED_LABEL>pCtrl.hHeaderFont <> 0 THEN DeleteObject(#<ENHANCED_LABEL>pCtrl.hHeaderFont)
+                IF #<ENHANCED_LABEL>pCtrl.hHeaderDescFont <> 0 THEN DeleteObject(#<ENHANCED_LABEL>pCtrl.hHeaderDescFont)
+                IF #<ENHANCED_LABEL>pCtrl.hLinkFont <> 0 THEN DeleteObject(#<ENHANCED_LABEL>pCtrl.hLinkFont)
+                IF #<ENHANCED_LABEL>pCtrl.pHeaderGpImage <> NULL THEN GdipDisposeImage(#<ENHANCED_LABEL>pCtrl.pHeaderGpImage)
+                
+                FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkCount - 1
+                    IF #<ENHANCED_LABEL>pCtrl.links[i].pGpImage <> NULL THEN
+                        GdipDisposeImage(#<ENHANCED_LABEL>pCtrl.links[i].pGpImage)
+                    ENDIF
+                NEXT i
+
+                UINT hDestroyTT = #<ENHANCED_LABEL>pCtrl.hwndCustomTT
+                IF hDestroyTT <> 0 THEN DestroyWindow(hDestroyTT)
+                IF #<ENHANCED_LABEL>pCtrl.hSnapshotBmp <> 0 THEN DeleteObject(#<ENHANCED_LABEL>pCtrl.hSnapshotBmp)
+                ShutdownGDIPlus()
+                HeapFree(GetProcessHeap(), 0, pData)
+            ENDIF
+            RETURN 0
+    ENDSELECT
+    RETURN DefWindowProcA(hwnd, uMsg, wp, lp)
+ENDSUB
+
+SUB EL_Create(hwndParent:UINT, controlID:INT), POINTER
+    IF hwndParent == 0 THEN RETURN NULL
+    UINT hPlaceholder = GetDlgItem(hwndParent, controlID)
+    WINRECT rc
+    POINT ptTL, ptBR
+    ptTL.x = 0 : ptTL.y = 0
+    ptBR.x = 200 : ptBR.y = 100
+    INT ctrlWidth = 200, ctrlHeight = 100
+    IF hPlaceholder <> 0 THEN
+        GetWindowRect(hPlaceholder, &rc)
+        ptTL.x = rc.left : ptTL.y = rc.top
+        ptBR.x = rc.right : ptBR.y = rc.bottom
+        ScreenToClient(hwndParent, &ptTL)
+        ScreenToClient(hwndParent, &ptBR)
+        ctrlWidth = ptBR.x - ptTL.x
+        ctrlHeight = ptBR.y - ptTL.y
+        ShowWindowAsync(hPlaceholder, 0)
+    ENDIF
+
+    POINTER pData = HeapAlloc(GetProcessHeap(), 0x00000008, LEN(ENHANCED_LABEL))
+    IF pData == NULL THEN RETURN NULL
+    InitGDIPlus()
+
+    POINTER pCtrl
+    pCtrl = pData
+
+    #<ENHANCED_LABEL>pCtrl.bodyBgColor = RGB(240, 240, 240)
+    #<ENHANCED_LABEL>pCtrl.headerTextColor = RGB(0, 0, 0)
+    #<ENHANCED_LABEL>pCtrl.isHovered = FALSE
+    #<ENHANCED_LABEL>pCtrl.fullHeight = ctrlHeight
+    #<ENHANCED_LABEL>pCtrl.animHeight = ctrlHeight
+    #<ENHANCED_LABEL>pCtrl.isCollapsed = FALSE
+    #<ENHANCED_LABEL>pCtrl.isAnimating = FALSE
+    #<ENHANCED_LABEL>pCtrl.linkCount = 0
+    #<ENHANCED_LABEL>pCtrl.linkBarCount = 0
+    #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex = -1
+    #<ENHANCED_LABEL>pCtrl.pressedLinkIndex = -1
+    #<ENHANCED_LABEL>pCtrl.hoveredBarIndex = -1
+    #<ENHANCED_LABEL>pCtrl.pressedBarIndex = -1
+    #<ENHANCED_LABEL>pCtrl.hLinkFont = 0
+    #<ENHANCED_LABEL>pCtrl.hwndCustomTT = 0
+    #<ENHANCED_LABEL>pCtrl.enableClearType = TRUE
+    #<ENHANCED_LABEL>pCtrl.enableSmoothing = TRUE
+    #<ENHANCED_LABEL>pCtrl.useDualHeader = FALSE
+    #<ENHANCED_LABEL>pCtrl.hHeaderDescFont = 0
+    #<ENHANCED_LABEL>pCtrl.headerBorderSide = EL_BORDER_NONE
+    #<ENHANCED_LABEL>pCtrl.bodyBorderSide = EL_BORDER_NONE
+    #<ENHANCED_LABEL>pCtrl.useLinkBar = FALSE
+    #<ENHANCED_LABEL>pCtrl.linkBarHeight = 0
+    #<ENHANCED_LABEL>pCtrl.showVertSeparator = FALSE
+    #<ENHANCED_LABEL>pCtrl.vertSeparatorColor = RGB(100, 116, 139)
+    #<ENHANCED_LABEL>pCtrl.vertSeparatorWidth = 1
+    #<ENHANCED_LABEL>pCtrl.vertSeparatorIndent = 120
+    #<ENHANCED_LABEL>pCtrl.hHeaderBgBitmap = 0
+    #<ENHANCED_LABEL>pCtrl.hBodyBgBitmap = 0
+    #<ENHANCED_LABEL>pCtrl.enableLinkGlow = FALSE
+    #<ENHANCED_LABEL>pCtrl.linkGlowColor = RGB(56, 189, 248)
+    #<ENHANCED_LABEL>pCtrl.linkColumns = 1
+    #<ENHANCED_LABEL>pCtrl.linkColWidth = 180
+    #<ENHANCED_LABEL>pCtrl.linkColGapX = 15
+    #<ENHANCED_LABEL>pCtrl.linkRowGapY = 6
+    #<ENHANCED_LABEL>pCtrl.scrollOffset = 0
+    #<ENHANCED_LABEL>pCtrl.isDraggingThumb = FALSE
+    #<ENHANCED_LABEL>pCtrl.headerHighlightStyle = EL_HIGHLIGHT_BORDER_ONLY
+
+    #<ENHANCED_LABEL>pCtrl.themeLinkTextColor      = RGB(248, 250, 252)
+    #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor  = RGB(56, 189, 248)
+    #<ENHANCED_LABEL>pCtrl.themeLinkBgColor         = RGB(30, 41, 59)
+    #<ENHANCED_LABEL>pCtrl.themeBarTextColor        = RGB(226, 232, 240)
+    #<ENHANCED_LABEL>pCtrl.themeBarHighlightColor   = RGB(56, 189, 248)
+    #<ENHANCED_LABEL>pCtrl.themeScrollTrackColor    = RGB(30, 41, 59)
+    #<ENHANCED_LABEL>pCtrl.themeScrollThumbColor    = RGB(56, 189, 248)
+    #<ENHANCED_LABEL>pCtrl.themeTTBgColor   = RGB(15, 23, 42)
+    #<ENHANCED_LABEL>pCtrl.themeTTTextColor = RGB(248, 250, 252)
+    #<ENHANCED_LABEL>pCtrl.themeTTGlowColor = RGB(56, 189, 248)
+
+    UINT hCustom = CreateWindowExA(0, &ENHANCED_LABEL_CLASS, NULL, 0x50010000, ptTL.x, ptTL.y, ctrlWidth, ctrlHeight, hwndParent, controlID, GetModuleHandleA(NULL), NULL)
+    #<ENHANCED_LABEL>pCtrl.hwndCtrl = hCustom
+    SetPropA(hCustom, "EL_pData", pData)
+    RedrawWindow(hCustom, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN pData
+ENDSUB
+
+SUB EL_Destroy(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    IF #<ENHANCED_LABEL>pCtrl.hwndCtrl <> 0 THEN DestroyWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_AddLink(ptr:POINTER, cmdID:UINT, pText:POINTER, pTips:POINTER, textColor:UINT, highlight:UINT, bgHighlight:UINT, alpha:UINT, bold:INT, underline:INT, indent:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    INT idx = #<ENHANCED_LABEL>pCtrl.linkCount
+    IF idx >= MAX_EL_LINKS THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.links[idx].cmdID = cmdID
+    #<ENHANCED_LABEL>pCtrl.links[idx].hBitmap = 0
+    #<ENHANCED_LABEL>pCtrl.links[idx].textColor = textColor
+    #<ENHANCED_LABEL>pCtrl.links[idx].highlight = highlight
+    #<ENHANCED_LABEL>pCtrl.links[idx].bgHighlight = bgHighlight
+    #<ENHANCED_LABEL>pCtrl.links[idx].alphaBlending = alpha
+    #<ENHANCED_LABEL>pCtrl.links[idx].boldHighlight = bold
+    #<ENHANCED_LABEL>pCtrl.links[idx].underlineHighlight = underline
+    #<ENHANCED_LABEL>pCtrl.links[idx].indent = indent
+    IF pText <> NULL THEN lstrcpyW(#<ENHANCED_LABEL>pCtrl.links[idx].text, pText) ELSE #<ENHANCED_LABEL>pCtrl.links[idx].text = L""
+    IF pTips <> NULL THEN lstrcpyW(#<ENHANCED_LABEL>pCtrl.links[idx].tips, pTips) ELSE #<ENHANCED_LABEL>pCtrl.links[idx].tips = L""
+    #<ENHANCED_LABEL>pCtrl.linkCount = idx + 1
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_AddContentLink(ptr:POINTER, cmdID:UINT, hBmp:UINT, pText:POINTER, pTips:POINTER, transparentCol:UINT, textColor:UINT, highlight:UINT, bgHighlight:UINT, alpha:UINT, bold:INT, underline:INT, indent:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    INT idx = #<ENHANCED_LABEL>pCtrl.linkCount
+    IF idx >= MAX_EL_LINKS THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.links[idx].cmdID = cmdID
+    #<ENHANCED_LABEL>pCtrl.links[idx].hBitmap = hBmp
+    #<ENHANCED_LABEL>pCtrl.links[idx].pGpImage = NULL
+    #<ENHANCED_LABEL>pCtrl.links[idx].textColor = textColor
+    #<ENHANCED_LABEL>pCtrl.links[idx].highlight = highlight
+    #<ENHANCED_LABEL>pCtrl.links[idx].bgHighlight = bgHighlight
+    #<ENHANCED_LABEL>pCtrl.links[idx].alphaBlending = alpha
+    #<ENHANCED_LABEL>pCtrl.links[idx].boldHighlight = bold
+    #<ENHANCED_LABEL>pCtrl.links[idx].underlineHighlight = underline
+    #<ENHANCED_LABEL>pCtrl.links[idx].indent = indent
+    IF pText <> NULL THEN lstrcpyW(#<ENHANCED_LABEL>pCtrl.links[idx].text, pText) ELSE #<ENHANCED_LABEL>pCtrl.links[idx].text = L""
+    IF pTips <> NULL THEN lstrcpyW(#<ENHANCED_LABEL>pCtrl.links[idx].tips, pTips) ELSE #<ENHANCED_LABEL>pCtrl.links[idx].tips = L""
+    #<ENHANCED_LABEL>pCtrl.linkCount = idx + 1
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_AddLinkBarItem(ptr:POINTER, cmdID:UINT, pText:POINTER, pTips:POINTER, textColor:UINT, highlight:UINT, bgHighlight:UINT, alpha:UINT, bold:INT, underline:INT, indent:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    INT idx = #<ENHANCED_LABEL>pCtrl.linkBarCount
+    IF idx >= MAX_EL_LINKS THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.linkBars[idx].cmdID = cmdID
+    #<ENHANCED_LABEL>pCtrl.linkBars[idx].hBitmap = 0
+    #<ENHANCED_LABEL>pCtrl.linkBars[idx].textColor = textColor
+    #<ENHANCED_LABEL>pCtrl.linkBars[idx].highlight = highlight
+    #<ENHANCED_LABEL>pCtrl.linkBars[idx].bgHighlight = bgHighlight
+    #<ENHANCED_LABEL>pCtrl.linkBars[idx].alphaBlending = alpha
+    #<ENHANCED_LABEL>pCtrl.linkBars[idx].boldHighlight = bold
+    #<ENHANCED_LABEL>pCtrl.linkBars[idx].underlineHighlight = underline
+    #<ENHANCED_LABEL>pCtrl.linkBars[idx].indent = indent
+    IF pText <> NULL THEN lstrcpyW(#<ENHANCED_LABEL>pCtrl.linkBars[idx].text, pText) ELSE #<ENHANCED_LABEL>pCtrl.linkBars[idx].text = L""
+    IF pTips <> NULL THEN lstrcpyW(#<ENHANCED_LABEL>pCtrl.linkBars[idx].tips, pTips) ELSE #<ENHANCED_LABEL>pCtrl.linkBars[idx].tips = L""
+    #<ENHANCED_LABEL>pCtrl.linkBarCount = idx + 1
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_ClearAllLinks(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.linkCount = 0
+    #<ENHANCED_LABEL>pCtrl.linkBarCount = 0
+    #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex = -1
+    #<ENHANCED_LABEL>pCtrl.pressedLinkIndex = -1
+    #<ENHANCED_LABEL>pCtrl.hoveredBarIndex = -1
+    #<ENHANCED_LABEL>pCtrl.pressedBarIndex = -1
+    #<ENHANCED_LABEL>pCtrl.scrollOffset = 0
+    HideCustomTooltip(ptr)
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_RemoveLink(ptr:POINTER, cmdID:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    INT foundIdx = -1, i
+    FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkCount - 1
+        IF #<ENHANCED_LABEL>pCtrl.links[i].cmdID == cmdID THEN
+            foundIdx = i
+            BREAKFOR
+        ENDIF
+    NEXT i
+    IF foundIdx <> -1 THEN
+        FOR i = foundIdx TO #<ENHANCED_LABEL>pCtrl.linkCount - 2
+            #<ENHANCED_LABEL>pCtrl.links[i] = #<ENHANCED_LABEL>pCtrl.links[i + 1]
+        NEXT i
+        #<ENHANCED_LABEL>pCtrl.linkCount = #<ENHANCED_LABEL>pCtrl.linkCount - 1
+        #<ENHANCED_LABEL>pCtrl.hoveredLinkIndex = -1
+        #<ENHANCED_LABEL>pCtrl.pressedLinkIndex = -1
+        HideCustomTooltip(ptr)
+        RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+        RETURN TRUE
+    ENDIF
+    RETURN FALSE
+ENDSUB
+
+SUB EL_EnableClearType(ptr:POINTER, enable:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.enableClearType = enable
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_EnableHighQualitySmoothingMode(ptr:POINTER, enable:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.enableSmoothing = enable
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderBorder(ptr:POINTER, borderSide:INT, borderColor:UINT, borderWidth:UINT, indentX:UINT, indentY:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.headerBorderSide = borderSide
+    #<ENHANCED_LABEL>pCtrl.headerBorderColor = borderColor
+    #<ENHANCED_LABEL>pCtrl.headerBorderWidth = borderWidth
+    #<ENHANCED_LABEL>pCtrl.headerBorderIndentX = indentX
+    #<ENHANCED_LABEL>pCtrl.headerBorderIndentY = indentY
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetBodyBorder(ptr:POINTER, borderSide:INT, borderColor:UINT, borderWidth:UINT, indentX:UINT, indentY:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.bodyBorderSide = borderSide
+    #<ENHANCED_LABEL>pCtrl.bodyBorderColor = borderColor
+    #<ENHANCED_LABEL>pCtrl.bodyBorderWidth = borderWidth
+    #<ENHANCED_LABEL>pCtrl.bodyBorderIndentX = indentX
+    #<ENHANCED_LABEL>pCtrl.bodyBorderIndentY = indentY
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderHighlightStyle(ptr:POINTER, enableHighlight:INT, highlightStyle:INT, bWidth:UINT, bColor:UINT, tColor:UINT, alpha:UINT, offsetX:UINT, offsetY:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.enableHighlight = enableHighlight
+    #<ENHANCED_LABEL>pCtrl.headerHighlightStyle = highlightStyle
+    #<ENHANCED_LABEL>pCtrl.highlightBorderColor = bColor
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderDetailsTitle(ptr:POINTER, title:WSTRING, textColor:UINT, alignment:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.headerTitle = title
+    #<ENHANCED_LABEL>pCtrl.headerTextColor = textColor
+    #<ENHANCED_LABEL>pCtrl.headerAlignment = alignment
+    #<ENHANCED_LABEL>pCtrl.useDualHeader = TRUE
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderDetailsDescription(ptr:POINTER, desc:WSTRING, textColor:UINT, alignment:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.headerDesc = desc
+    #<ENHANCED_LABEL>pCtrl.headerDescTextColor = textColor
+    #<ENHANCED_LABEL>pCtrl.headerDescAlignment = alignment
+    #<ENHANCED_LABEL>pCtrl.useDualHeader = TRUE
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderDetailsDescriptionFont(ptr:POINTER, fontName:WSTRING, fontSize:INT, fontWeight:INT, isItalic:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    IF #<ENHANCED_LABEL>pCtrl.hHeaderDescFont <> 0 THEN DeleteObject(#<ENHANCED_LABEL>pCtrl.hHeaderDescFont)
+    #<ENHANCED_LABEL>pCtrl.hHeaderDescFont = CreateFontW(-fontSize, 0, 0, 0, fontWeight, isItalic, 0, 0, 0, 0, 0, 0, 0, &fontName)
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetLinkBarHeight(ptr:POINTER, height:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.linkBarHeight = height
+    #<ENHANCED_LABEL>pCtrl.useLinkBar = (height > 0)
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetLinkBarBackgroundGradient(ptr:POINTER, col1:UINT, col2:UINT, isVertical:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.linkBarGradColor1 = col1
+    #<ENHANCED_LABEL>pCtrl.linkBarGradColor2 = col2
+    #<ENHANCED_LABEL>pCtrl.linkBarGradVertical = isVertical
+    #<ENHANCED_LABEL>pCtrl.useLinkBar = TRUE
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetLinkBarVerticalSeparator(ptr:POINTER, showSeparator:INT, separatorColor:UINT, separatorWidth:UINT, separatorIndent:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.showVertSeparator = showSeparator
+    #<ENHANCED_LABEL>pCtrl.vertSeparatorColor = separatorColor
+    #<ENHANCED_LABEL>pCtrl.vertSeparatorWidth = separatorWidth
+    #<ENHANCED_LABEL>pCtrl.vertSeparatorIndent = separatorIndent
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderIcon(ptr:POINTER, hIcon:UINT, width:INT, height:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.hHeaderIcon = hIcon
+    #<ENHANCED_LABEL>pCtrl.iconWidth = width
+    #<ENHANCED_LABEL>pCtrl.iconHeight = height
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_ToggleCollapse(ptr:POINTER)
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN
+
+    UINT hCtrlWnd = #<ENHANCED_LABEL>pCtrl.hwndCtrl
+    WINRECT rc
+    GetWindowRect(hCtrlWnd, &rc)
+    INT currentH = rc.bottom - rc.top
+
+    #<ENHANCED_LABEL>pCtrl.isCollapsed = NOT #<ENHANCED_LABEL>pCtrl.isCollapsed
+
+    IF #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE THEN
+        POINT pt
+        pt.x = rc.left : pt.y = rc.top
+        UINT hParent = GetParent(hCtrlWnd)
+        IF hParent <> 0 THEN ScreenToClient(hParent, &pt)
+        
+        INT targetFullH = #<ENHANCED_LABEL>pCtrl.fullHeight
+        MoveWindow(hCtrlWnd, pt.x, pt.y, rc.right - rc.left, targetFullH, FALSE)
+
+        TakeControlSnapshot(ptr)
+
+        #<ENHANCED_LABEL>pCtrl.animHeight = #<ENHANCED_LABEL>pCtrl.headerHeight
+        MoveWindow(hCtrlWnd, pt.x, pt.y, rc.right - rc.left, #<ENHANCED_LABEL>pCtrl.headerHeight, TRUE)
+    ELSE
+        TakeControlSnapshot(ptr)
+        #<ENHANCED_LABEL>pCtrl.animHeight = currentH
+    ENDIF
+
+    #<ENHANCED_LABEL>pCtrl.isAnimating = TRUE
+    SetTimer(hCtrlWnd, EL_TIMER_ID, 16, NULL)
+ENDSUB
+
+SUB EL_Resize(ptr:POINTER, x:INT, y:INT, width:INT, height:INT)
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN
+
+    IF #<ENHANCED_LABEL>pCtrl.isCollapsed == FALSE THEN
+        #<ENHANCED_LABEL>pCtrl.fullHeight = height
+        #<ENHANCED_LABEL>pCtrl.animHeight = height
+    ELSE
+        #<ENHANCED_LABEL>pCtrl.fullHeight = height
+    ENDIF
+
+    INT bodyTop = #<ENHANCED_LABEL>pCtrl.headerHeight
+    INT linkBarHeight = IIF(#<ENHANCED_LABEL>pCtrl.useLinkBar == TRUE, #<ENHANCED_LABEL>pCtrl.linkBarHeight, 0)
+    INT bodyH = height - bodyTop - linkBarHeight
+    INT numCols = IIF(#<ENHANCED_LABEL>pCtrl.linkColumns < 1, 1, #<ENHANCED_LABEL>pCtrl.linkColumns)
+    INT itemHeight = 28
+    INT gapY = #<ENHANCED_LABEL>pCtrl.linkRowGapY
+    INT totalRows = (#<ENHANCED_LABEL>pCtrl.linkCount + numCols - 1) / numCols
+    INT contentH = totalRows * (itemHeight + gapY) + 20
+    INT maxScroll = contentH - bodyH
+    IF maxScroll < 0 THEN maxScroll = 0
+
+    IF #<ENHANCED_LABEL>pCtrl.scrollOffset > maxScroll THEN
+        #<ENHANCED_LABEL>pCtrl.scrollOffset = maxScroll
+    ENDIF
+
+    INT currentHeight = IIF(#<ENHANCED_LABEL>pCtrl.isCollapsed == TRUE, #<ENHANCED_LABEL>pCtrl.headerHeight, height)
+    MoveWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, x, y, width, currentHeight, TRUE)
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+ENDSUB
+
+SUB EL_SetHeaderHeight(ptr:POINTER, height:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.headerHeight = height
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderFont(ptr:POINTER, fontName:WSTRING, fontSize:INT, fontWeight:INT, isItalic:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    IF #<ENHANCED_LABEL>pCtrl.hHeaderFont <> 0 THEN DeleteObject(#<ENHANCED_LABEL>pCtrl.hHeaderFont)
+    #<ENHANCED_LABEL>pCtrl.hHeaderFont = CreateFontW(-fontSize, 0, 0, 0, fontWeight, isItalic, 0, 0, 0, 0, 0, 0, 0, &fontName)
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetLinkFont(ptr:POINTER, fontName:WSTRING, fontSize:INT, fontWeight:INT, isItalic:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    IF #<ENHANCED_LABEL>pCtrl.hLinkFont <> 0 THEN DeleteObject(#<ENHANCED_LABEL>pCtrl.hLinkFont)
+    #<ENHANCED_LABEL>pCtrl.hLinkFont = CreateFontW(-fontSize, 0, 0, 0, fontWeight, isItalic, 0, 0, 0, 0, 0, 0, 0, &fontName)
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderStandardLeftTitle(ptr:POINTER, title:WSTRING, textColor:UINT, alignment:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.headerTitle = title
+    #<ENHANCED_LABEL>pCtrl.headerTextColor = textColor
+    #<ENHANCED_LABEL>pCtrl.headerAlignment = alignment
+    #<ENHANCED_LABEL>pCtrl.useDualHeader = FALSE
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderOnClickCommand(ptr:POINTER, cmdID:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.headerCmdID = cmdID
+    RETURN TRUE
+ENDSUB
+
+SUB EL_EnableLinkGlow(ptr:POINTER, enable:INT, glowColor:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.enableLinkGlow = enable
+    #<ENHANCED_LABEL>pCtrl.linkGlowColor = glowColor
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetLinkColumns(ptr:POINTER, columns:INT, colWidth:INT, colGapX:INT, rowGapY:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.linkColumns = columns
+    #<ENHANCED_LABEL>pCtrl.linkColWidth = colWidth
+    #<ENHANCED_LABEL>pCtrl.linkColGapX = colGapX
+    #<ENHANCED_LABEL>pCtrl.linkRowGapY = rowGapY
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_ApplyTheme(ptr:POINTER, themeID:INT)
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN
+
+    INT i
+    UINT catBgColor, catTextColor
+
+    SELECT themeID
+        CASE EL_THEME_DARK_SLATE
+            #<ENHANCED_LABEL>pCtrl.headerGradColor1     = RGB(30, 41, 59)
+            #<ENHANCED_LABEL>pCtrl.headerGradColor2     = RGB(15, 23, 42)
+            #<ENHANCED_LABEL>pCtrl.headerGradVertical   = TRUE
+            #<ENHANCED_LABEL>pCtrl.headerTextColor       = RGB(248, 250, 252)
+            #<ENHANCED_LABEL>pCtrl.headerDescTextColor   = RGB(148, 163, 184)
+            #<ENHANCED_LABEL>pCtrl.bodyBgColor           = RGB(15, 23, 42)
+            #<ENHANCED_LABEL>pCtrl.useBodyGradient       = FALSE
+            
+            #<ENHANCED_LABEL>pCtrl.themeLinkTextColor    = RGB(248, 250, 252)
+            #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor = RGB(56, 189, 248)
+            #<ENHANCED_LABEL>pCtrl.themeLinkBgColor       = RGB(30, 41, 59)
+            
+            #<ENHANCED_LABEL>pCtrl.linkBarGradColor1     = RGB(30, 41, 59)
+            #<ENHANCED_LABEL>pCtrl.linkBarGradColor2     = RGB(15, 23, 42)
+            #<ENHANCED_LABEL>pCtrl.linkBarGradVertical   = TRUE
+            
+            #<ENHANCED_LABEL>pCtrl.themeScrollTrackColor = RGB(30, 41, 59)
+            #<ENHANCED_LABEL>pCtrl.themeScrollThumbColor = RGB(71, 85, 105)
+            
+            #<ENHANCED_LABEL>pCtrl.themeTTBgColor        = RGB(15, 23, 42)
+            #<ENHANCED_LABEL>pCtrl.themeTTTextColor      = RGB(248, 250, 252)
+            #<ENHANCED_LABEL>pCtrl.themeTTGlowColor       = RGB(56, 189, 248)
+
+            catBgColor   = RGB(30, 41, 59)
+            catTextColor = RGB(56, 189, 248)
+
+        CASE EL_THEME_OFFICE_BLUE
+            #<ENHANCED_LABEL>pCtrl.headerGradColor1     = RGB(219, 234, 254)
+            #<ENHANCED_LABEL>pCtrl.headerGradColor2     = RGB(191, 219, 254)
+            #<ENHANCED_LABEL>pCtrl.headerGradVertical   = TRUE
+            #<ENHANCED_LABEL>pCtrl.headerTextColor       = RGB(30, 58, 138)
+            #<ENHANCED_LABEL>pCtrl.headerDescTextColor   = RGB(29, 78, 216)
+            #<ENHANCED_LABEL>pCtrl.bodyBgColor           = RGB(239, 246, 255)
+            #<ENHANCED_LABEL>pCtrl.useBodyGradient       = FALSE
+            
+            #<ENHANCED_LABEL>pCtrl.themeLinkTextColor    = RGB(30, 58, 138)
+            #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor = RGB(29, 78, 216)
+            #<ENHANCED_LABEL>pCtrl.themeLinkBgColor       = RGB(219, 234, 254)
+            
+            #<ENHANCED_LABEL>pCtrl.linkBarGradColor1     = RGB(219, 234, 254)
+            #<ENHANCED_LABEL>pCtrl.linkBarGradColor2     = RGB(191, 219, 254)
+            #<ENHANCED_LABEL>pCtrl.linkBarGradVertical   = TRUE
+            
+            #<ENHANCED_LABEL>pCtrl.themeScrollTrackColor = RGB(219, 234, 254)
+            #<ENHANCED_LABEL>pCtrl.themeScrollThumbColor = RGB(147, 197, 253)
+            
+            #<ENHANCED_LABEL>pCtrl.themeTTBgColor        = RGB(239, 246, 255)
+            #<ENHANCED_LABEL>pCtrl.themeTTTextColor      = RGB(30, 58, 138)
+            #<ENHANCED_LABEL>pCtrl.themeTTGlowColor       = RGB(29, 78, 216)
+
+            catBgColor   = RGB(191, 219, 254)
+            catTextColor = RGB(30, 58, 138)
+
+        CASE EL_THEME_GLASS_MINIMAL
+            #<ENHANCED_LABEL>pCtrl.headerGradColor1     = RGB(241, 245, 249)
+            #<ENHANCED_LABEL>pCtrl.headerGradColor2     = RGB(226, 232, 240)
+            #<ENHANCED_LABEL>pCtrl.headerGradVertical   = TRUE
+            #<ENHANCED_LABEL>pCtrl.headerTextColor       = RGB(15, 23, 42)
+            #<ENHANCED_LABEL>pCtrl.headerDescTextColor   = RGB(71, 85, 105)
+            #<ENHANCED_LABEL>pCtrl.bodyBgColor           = RGB(255, 255, 255)
+            #<ENHANCED_LABEL>pCtrl.useBodyGradient       = FALSE
+            
+            #<ENHANCED_LABEL>pCtrl.themeLinkTextColor    = RGB(15, 23, 42)
+            #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor = RGB(2, 132, 199)
+            #<ENHANCED_LABEL>pCtrl.themeLinkBgColor       = RGB(241, 245, 249)
+            
+            #<ENHANCED_LABEL>pCtrl.linkBarGradColor1     = RGB(241, 245, 249)
+            #<ENHANCED_LABEL>pCtrl.linkBarGradColor2     = RGB(226, 232, 240)
+            #<ENHANCED_LABEL>pCtrl.linkBarGradVertical   = TRUE
+            
+            #<ENHANCED_LABEL>pCtrl.themeScrollTrackColor = RGB(241, 245, 249)
+            #<ENHANCED_LABEL>pCtrl.themeScrollThumbColor = RGB(203, 213, 225)
+            
+            #<ENHANCED_LABEL>pCtrl.themeTTBgColor        = RGB(255, 255, 255)
+            #<ENHANCED_LABEL>pCtrl.themeTTTextColor      = RGB(15, 23, 42)
+            #<ENHANCED_LABEL>pCtrl.themeTTGlowColor       = RGB(2, 132, 199)
+
+            catBgColor   = RGB(226, 232, 240)
+            catTextColor = RGB(15, 23, 42)
+
+        CASE EL_THEME_CRIMSON_DARK
+            #<ENHANCED_LABEL>pCtrl.headerGradColor1     = RGB(136, 19, 55)
+            #<ENHANCED_LABEL>pCtrl.headerGradColor2     = RGB(76, 5, 25)
+            #<ENHANCED_LABEL>pCtrl.headerGradVertical   = TRUE
+            #<ENHANCED_LABEL>pCtrl.headerTextColor       = RGB(255, 241, 242)
+            #<ENHANCED_LABEL>pCtrl.headerDescTextColor   = RGB(251, 113, 133)
+            #<ENHANCED_LABEL>pCtrl.bodyBgColor           = RGB(30, 10, 15)
+            #<ENHANCED_LABEL>pCtrl.useBodyGradient       = FALSE
+            
+            #<ENHANCED_LABEL>pCtrl.themeLinkTextColor    = RGB(255, 241, 242)
+            #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor = RGB(251, 113, 133)
+            #<ENHANCED_LABEL>pCtrl.themeLinkBgColor       = RGB(76, 5, 25)
+            
+            #<ENHANCED_LABEL>pCtrl.linkBarGradColor1     = RGB(136, 19, 55)
+            #<ENHANCED_LABEL>pCtrl.linkBarGradColor2     = RGB(76, 5, 25)
+            #<ENHANCED_LABEL>pCtrl.linkBarGradVertical   = TRUE
+            
+            #<ENHANCED_LABEL>pCtrl.themeScrollTrackColor = RGB(76, 5, 25)
+            #<ENHANCED_LABEL>pCtrl.themeScrollThumbColor = RGB(159, 18, 57)
+            
+            #<ENHANCED_LABEL>pCtrl.themeTTBgColor        = RGB(30, 10, 15)
+            #<ENHANCED_LABEL>pCtrl.themeTTTextColor      = RGB(255, 241, 242)
+            #<ENHANCED_LABEL>pCtrl.themeTTGlowColor       = RGB(251, 113, 133)
+
+            catBgColor   = RGB(76, 5, 25)
+            catTextColor = RGB(251, 113, 133)
+    ENDSELECT
+
+    #<ENHANCED_LABEL>pCtrl.linkGlowColor = catTextColor
+
+    FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkCount - 1
+        IF #<ENHANCED_LABEL>pCtrl.links[i].isCategoryHeader THEN
+            #<ENHANCED_LABEL>pCtrl.links[i].textColor   = catTextColor
+            #<ENHANCED_LABEL>pCtrl.links[i].highlight   = catTextColor
+            #<ENHANCED_LABEL>pCtrl.links[i].bgHighlight = catBgColor
+        ELSE
+            #<ENHANCED_LABEL>pCtrl.links[i].textColor   = #<ENHANCED_LABEL>pCtrl.themeLinkTextColor
+            #<ENHANCED_LABEL>pCtrl.links[i].highlight   = #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor
+            #<ENHANCED_LABEL>pCtrl.links[i].bgHighlight = #<ENHANCED_LABEL>pCtrl.themeLinkBgColor
+        ENDIF
+    NEXT i
+
+    FOR i = 0 TO #<ENHANCED_LABEL>pCtrl.linkBarCount - 1
+        #<ENHANCED_LABEL>pCtrl.linkBars[i].textColor   = #<ENHANCED_LABEL>pCtrl.themeLinkTextColor
+        #<ENHANCED_LABEL>pCtrl.linkBars[i].highlight   = #<ENHANCED_LABEL>pCtrl.themeLinkHighlightColor
+        #<ENHANCED_LABEL>pCtrl.linkBars[i].bgHighlight = #<ENHANCED_LABEL>pCtrl.themeLinkBgColor
+    NEXT i
+
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+ENDSUB
+
+SUB EL_IsCollapsed(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    RETURN #<ENHANCED_LABEL>pCtrl.isCollapsed
+ENDSUB
+
+SUB EL_GetHeaderHeight(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN 0
+    RETURN #<ENHANCED_LABEL>pCtrl.headerHeight
+ENDSUB
+
+SUB EL_GetControlHeight(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN 0
+    WINRECT rc
+    GetWindowRect(#<ENHANCED_LABEL>pCtrl.hwndCtrl, &rc)
+    RETURN rc.bottom - rc.top
+ENDSUB
+
+SUB EL_GetHeaderTitle(ptr:POINTER, outTitle:POINTER, maxChars:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL OR outTitle == NULL THEN RETURN FALSE
+    POINTER pTitle = &#<ENHANCED_LABEL>pCtrl.headerTitle
+    lstrcpynW(outTitle, pTitle, maxChars)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetScrollOffset(ptr:POINTER, offset:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    IF offset < 0 THEN offset = 0
+    #<ENHANCED_LABEL>pCtrl.scrollOffset = offset
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_GetScrollOffset(ptr:POINTER), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN 0
+    RETURN #<ENHANCED_LABEL>pCtrl.scrollOffset
+ENDSUB
+
+SUB EL_SetBody3StopGradient(ptr:POINTER, col1:UINT, col2:UINT, col3:UINT, isVertical:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.bodyGradColor1 = col1
+    #<ENHANCED_LABEL>pCtrl.bodyGradColor2 = col2
+    #<ENHANCED_LABEL>pCtrl.bodyGradColor3 = col3
+    #<ENHANCED_LABEL>pCtrl.bodyGradVertical = isVertical
+    #<ENHANCED_LABEL>pCtrl.useBodyGradient = TRUE
+    #<ENHANCED_LABEL>pCtrl.hBodyBgBitmap = 0
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetBodySolidColor(ptr:POINTER, rgbColor:UINT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.bodyBgColor = rgbColor
+    #<ENHANCED_LABEL>pCtrl.useBodyGradient = FALSE
+    #<ENHANCED_LABEL>pCtrl.hBodyBgBitmap = 0
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderBackgroundGradient(ptr:POINTER, col1:UINT, col2:UINT, isVertical:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.headerGradColor1 = col1
+    #<ENHANCED_LABEL>pCtrl.headerGradColor2 = col2
+    #<ENHANCED_LABEL>pCtrl.headerGradVertical = isVertical
+    #<ENHANCED_LABEL>pCtrl.hHeaderBgBitmap = 0
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetHeaderBackgroundImage(ptr:POINTER, hBitmap:UINT, width:INT, height:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.hHeaderBgBitmap = hBitmap
+    #<ENHANCED_LABEL>pCtrl.headerBmpWidth = width
+    #<ENHANCED_LABEL>pCtrl.headerBmpHeight = height
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB
+
+SUB EL_SetBodyBackgroundImage(ptr:POINTER, hBitmap:UINT, width:INT, height:INT), INT
+    POINTER pCtrl
+    pCtrl = ptr
+    IF pCtrl == NULL THEN RETURN FALSE
+    #<ENHANCED_LABEL>pCtrl.hBodyBgBitmap = hBitmap
+    #<ENHANCED_LABEL>pCtrl.bodyBmpWidth  = width
+    #<ENHANCED_LABEL>pCtrl.bodyBmpHeight = height
+    RedrawWindow(#<ENHANCED_LABEL>pCtrl.hwndCtrl, NULL, NULL, RDW_INVALIDATE | RDW_UPDATENOW)
+    RETURN TRUE
+ENDSUB

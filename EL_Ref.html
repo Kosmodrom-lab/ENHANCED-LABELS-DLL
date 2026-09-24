@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EnhancedLabels.dll - Context & Technical Reference</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #1f2937;
+            background-color: #f9fafb;
+            margin: 0;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #ffffff;
+            padding: 2.5rem;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+            border: 1px solid #e5e7eb;
+        }
+        h1 { font-size: 2.25rem; border-bottom: 2px solid #3b82f6; padding-bottom: 0.5rem; color: #1e3a8a; }
+        h2 { font-size: 1.5rem; color: #1e40af; margin-top: 2rem; border-bottom: 1px solid #e5e7eb; padding-bottom: 0.3rem; }
+        h3 { font-size: 1.25rem; color: #2563eb; margin-top: 1.5rem; }
+        a { color: #2563eb; text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        
+        /* Solarized Light Code & Inline Styling */
+        code { 
+            font-family: "Consolas", "Courier New", monospace; 
+            background-color: #eee8d5; 
+            color: #268bd2; 
+            padding: 0.2rem 0.4rem; 
+            border-radius: 4px; 
+            font-size: 0.9em; 
+        }
+        pre { 
+            background-color: #fdf6e3; 
+            color: #586e75; 
+            padding: 1.25rem; 
+            border-radius: 6px; 
+            overflow-x: auto; 
+            font-family: "Consolas", "Courier New", monospace; 
+            font-size: 0.88em; 
+            border: 1px solid #eee8d5;
+        }
+        pre code { 
+            background-color: transparent; 
+            color: #586e75; 
+            padding: 0; 
+        }
+        
+        table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.95em; }
+        th, td { border: 1px solid #d1d5db; padding: 0.6rem 0.8rem; text-align: left; }
+        th { background-color: #f3f4f6; color: #1f2937; font-weight: 600; }
+        tr:nth-child(even) { background-color: #f9fafb; }
+        .toc { background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px; padding: 1.25rem; margin-bottom: 2rem; }
+        .toc ul { margin: 0; padding-left: 1.25rem; }
+        .toc li { margin-bottom: 0.4rem; }
+        .status-badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.8em; font-weight: 600; }
+        .status-done { background-color: #d1fae5; color: #065f46; }
+        .status-planned { background-color: #fef3c7; color: #92400e; }
+        .warning-box { background-color: #fffbe3; border: 1px solid #fde047; border-radius: 6px; padding: 1rem; margin: 1rem 0; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>EnhancedLabels.dll Technical Context & Reference</h1>
+    <p><strong>Target Engine:</strong> IWBasic 2.5 / Win32 API / GDI+ / C stdcall<br>
+    <strong>Architecture Paradigm:</strong> Native Registered Custom Control Class with Owner-Drawn Content Link Engine (No Subclassing)</p>
+
+    <!-- Table of Contents -->
+    <div class="toc">
+        <h3>Table of Contents</h3>
+        <ul>
+            <li><a href="#roadmap">0. Feature Development Roadmap</a></li>
+            <li><a href="#architecture">1. System Architecture &amp; Overview</a></li>
+            <li><a href="#structures">2. State Structures &amp; Types</a></li>
+            <li><a href="#lifecycle">3. Registration &amp; Lifecycle APIs</a></li>
+            <li><a href="#styling">4. Styling &amp; Layout Configuration APIs</a></li>
+            <li><a href="#links-engine">5. Owner-Drawn Link Engine APIs</a></li>
+            <li><a href="#state-query">6. State Query &amp; Getter APIs</a></li>
+            <li><a href="#events">7. Event Model &amp; Animation System</a></li>
+            <li><a href="#quickstart">8. Quick-Start Integration Guide</a></li>
+            <li><a href="#icons">9. Win32 System Icon Reference Table</a></li>
+        </ul>
+    </div>
+
+    <!-- 0. Roadmap -->
+    <h2 id="roadmap">0. Feature Development Roadmap</h2>
+    <p>Status tracking for current functionality and planned feature parity relative to the reference API specification:</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Feature Module</th>
+                <th>Target Functions</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>Core Register &amp; Double-Buffer GDI+</td>
+                <td><code>EL_RegisterControl</code>, <code>EL_Create</code>, <code>EL_Destroy</code></td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Custom Typography</td>
+                <td><code>EL_SetHeaderFont</code>, <code>EL_SetLinkFont</code></td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Theme Engine &amp; Dynamic Re-skinning</td>
+                <td><code>EL_ApplyTheme</code> (Dark Slate, Office Blue, Glass Minimal, Crimson Dark)</td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Layered Auto-Hiding Tooltips</td>
+                <td><code>ShowCustomTooltip</code> (195 Alpha, 3s Auto-Hide, Theme-Mapped, Click Dismiss)</td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Quadratic Collapse Easing</td>
+                <td><code>EL_ToggleCollapse</code>, <code>WM_TIMER</code> (Ease-Out Motion Curve)</td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Link List &amp; Link Bar Management</td>
+                <td><code>EL_ClearAllLinks</code>, <code>EL_RemoveLink</code>, <code>EL_AddLinkBarItem</code></td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>State Querying &amp; Limits</td>
+                <td><code>EL_GetLinkCount</code>, <code>EL_GetHoveredLinkIndex</code>, <code>EL_GetMaxScrollOffset</code></td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Auto-Clamping Owner-Drawn Scrollbar</td>
+                <td><code>EL_Resize</code> (Auto-clamps scroll offset on container size expansion)</td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Background Bitmap Images</td>
+                <td><code>EL_SetHeaderBackgroundImage</code>, <code>EL_SetBodyBackgroundImage</code></td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Direct GDI+ PNG Alpha Asset Loading</td>
+                <td><code>EL_SetHeaderIconPNG</code>, <code>EL_AddPNGLink</code></td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Collapsible Link Categories / Sub-Groups</td>
+                <td><code>EL_AddCategoryHeader</code>, <code>EL_ToggleCategory</code></td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>Keyboard Navigation &amp; Global Focus Ring</td>
+                <td><code>WM_KEYDOWN</code> (TAB navigation, Space/Enter activation, Focus Ring painting)</td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+            <tr>
+                <td>C Language Bindings &amp; Import Header</td>
+                <td><code>EnhancedLabels.h</code> (stdcall C wrapper header for lcc-win32 / Pelles C / MSVC)</td>
+                <td><span class="status-badge status-done">Completed</span></td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- 1. Architecture -->
+    <h2 id="architecture">1. System Architecture &amp; Overview</h2>
+    <p><code>EnhancedLabels.dll</code> provides a lightweight, stack-safe custom control framework in Win32 using direct class registration via <code>RegisterClassExA</code>. By moving from Win32 child control subclassing to an owner-drawn architecture, it completely eliminates background erasing hacks, double-ghosting artifacts, and message-chain access violations during interaction.</p>
+    
+    <ul>
+        <li><strong>Class Names:</strong> Primary control class <code>IW_EnhancedLabelClass</code> and custom tooltip class <code>IW_EnhancedTooltipClass</code>.</li>
+        <li><strong>Window Handle Types:</strong> Window handles are strictly managed as <code>UINT</code> to align with IWBasic type requirements and avoid compiler structure conversion conflicts.</li>
+        <li><strong>Rendering Pipeline:</strong> Double-buffered GDI+ rendering pipeline leveraging offscreen memory DCs, anti-aliased text hints, GDI+ linear gradient brushes, and crisp alpha transparency.</li>
+        <li><strong>Dynamic Theme Palette Engine:</strong> <code>EL_ApplyTheme</code> re-skins the entire control dynamically at runtime—updating header gradients, body background colors, link text, link hover fills, glow halos, bottom link bars, scrollbars, and tooltips synchronously.</li>
+        <li><strong>Owner-Drawn Link Engine:</strong> Pure in-memory hit-testing (<code>rcBounds</code>) supporting custom typography (<code>EL_SetLinkFont</code>), multi-column grids, hover/press state fills, link glowing halos, direct 32-bit GDI+ PNG alpha images, and dynamic icons (<code>HBITMAP</code>/<code>HICON</code>).</li>
+        <li><strong>Horizontal Link Bar Strip:</strong> Dedicated bottom/top toolbar strip pass (<code>EL_SetLinkBarHeight</code>) rendered via GDI+ linear brushes and bounded with native Win32 dividers.</li>
+        <li><strong>Custom Owner-Drawn Tooltip System:</strong> Layered popup window (<code>WS_EX_LAYERED</code>) rendered at 195 Alpha (~76% opacity). Features a smart 3-second auto-hide timer that suppresses timer resets on identical hover text and instantly dismisses on mouse click.</li>
+        <li><strong>Animation Engine:</strong> Snapshot-blitted quadratic deceleration (ease-out) driving collapse/expand height transitions at ~60 FPS via Win32 <code>WM_TIMER</code>.</li>
+        <li><strong>Auto-Clamping Container Resizing:</strong> <code>EL_Resize</code> recalculates `maxScroll` dynamically when the control container is resized or maximized, automatically clamping `scrollOffset` back within valid bounds to prevent content offset dislocation.</li>
+        <li><strong>Multi-Instance Isolation:</strong> Full instance data encapsulation via <code>SetPropA</code> / <code>GetPropA</code> allowing unlimited control instances to coexist inside the same parent window.</li>
+        <li><strong>Accessibility &amp; Keyboard Navigation:</strong> Native TAB key traversal, focused control indicator borders (<code>DrawFocusRect</code>), and Space/Enter key execution handlers.</li>
+    </ul>
+
+    <!-- 2. Structures -->
+    <h2 id="structures">2. State Structures &amp; Types</h2>
+    <p>Internal control state and owner-drawn link instances are tracked in the <code>EL_LINK_ITEM</code> and <code>ENHANCED_LABEL</code> structures:</p>
+
+    <pre><code>' Owner-Drawn Link Item Structure
+TYPE EL_LINK_ITEM
+    UINT      cmdID              ' Parent WM_COMMAND Notification ID
+    WSTRING   text[128]          ' Display title text
+    WSTRING   tips[128]          ' Hover tooltip text
+    UINT      hBitmap            ' Optional graphic handle (HBITMAP or HICON)
+    POINTER   pGpImage           ' GDI+ Image Pointer for PNG alpha rendering
+    INT       imgWidth           ' Custom render width
+    INT       imgHeight          ' Custom render height
+    UINT      textColor          ' Default idle text color
+    UINT      highlight          ' Hover text color
+    UINT      bgHighlight        ' Hover background fill color
+    UINT      alphaBlending      ' Alpha blending level
+    INT       boldHighlight      ' Bold on hover flag
+    INT       underlineHighlight ' Underline on hover flag
+    UINT      indent             ' Horizontal indent offset
+    WINRECT   rcBounds           ' Dynamic hit-test bounding box calculated during paint
+    INT       isCategoryHeader   ' TRUE if item acts as a category header
+    INT       isCategoryCollapsed' TRUE if group items are hidden
+    INT       categoryID         ' Group ID reference
+ENDTYPE
+
+' Primary Custom Control Context
+TYPE ENHANCED_LABEL
+    UINT      hwndCtrl           ' Control Window Handle (UINT)
+    
+    ' Layout &amp; Collapse State
+    INT       fullHeight         ' Original expanded control height
+    INT       animHeight         ' Active interpolation height
+    INT       isCollapsed        ' Collapsed state flag (TRUE/FALSE)
+    INT       isAnimating        ' Active animation flag
+    
+    ' Snapshot Animation Bitmaps
+    UINT      hSnapshotBmp       ' Offscreen capture bitmap for smooth animation
+    INT       snapshotWidth
+    INT       snapshotHeight
+    
+    ' Body Settings
+    UINT      bodyBgColor
+    INT       useBodyGradient
+    UINT      bodyGradColor1, bodyGradColor2, bodyGradColor3
+    INT       bodyGradVertical
+    UINT      hBodyBgBitmap
+    INT       bodyBmpWidth
+    INT       bodyBmpHeight
+    
+    ' Header Settings
+    INT       headerHeight
+    INT       headerIndentX, headerIndentY
+    UINT      headerGradColor1, headerGradColor2
+    INT       headerGradVertical
+    WSTRING   headerTitle[128]
+    UINT      headerTextColor
+    INT       headerAlignment
+    UINT      hHeaderFont
+    INT       headerCmdID        ' Parent WM_COMMAND Notification ID for header click
+    UINT      hHeaderBgBitmap
+    INT       headerBmpWidth
+    INT       headerBmpHeight
+    POINTER   pHeaderGpImage     ' GDI+ Image Pointer for Header Icon PNG
+    INT       headerGpWidth
+    INT       headerGpHeight
+    
+    ' Header Border Accents
+    INT       headerBorderSide   ' EL_BORDER_NONE, LEFT, TOP, RIGHT, BOTTOM, ALL
+    UINT      headerBorderColor  ' Border COLORREF value
+    UINT      headerBorderWidth  ' Border line thickness in pixels
+    UINT      headerBorderIndentX' Horizontal inset margin
+    UINT      headerBorderIndentY' Vertical inset margin
+
+    ' Header Subtitle / Description Attributes
+    WSTRING   headerDesc[128]
+    UINT      headerDescTextColor
+    INT       headerDescAlignment
+    UINT      hHeaderDescFont
+    INT       useDualHeader
+    
+    ' Header Icon Attributes
+    UINT      hHeaderIcon        ' Handle to HICON
+    INT       iconWidth          ' Target render width
+    INT       iconHeight         ' Target render height
+    
+    ' Link Bar Strip Settings
+    INT       linkBarHeight
+    UINT      linkBarGradColor1, linkBarGradColor2
+    INT       linkBarGradVertical
+    INT       useLinkBar
+    INT       showVertSeparator
+    UINT      vertSeparatorColor
+    UINT      vertSeparatorWidth
+    UINT      vertSeparatorIndent
+
+    ' Multi-Column Link Grid &amp; Scrolling
+    INT       linkColumns
+    INT       linkColWidth
+    INT       linkColGapX
+    INT       linkRowGapY
+    INT       scrollOffset
+    INT       isDraggingThumb
+    INT       dragStartY
+    INT       dragStartOffset
+
+    ' Dynamic Theme Palette Colors
+    UINT      themeLinkTextColor
+    UINT      themeLinkHighlightColor
+    UINT      themeLinkBgColor
+    UINT      themeBarTextColor
+    UINT      themeBarHighlightColor
+    UINT      themeScrollTrackColor
+    UINT      themeScrollThumbColor
+
+    ' Tooltip Theme Palette Colors
+    UINT      themeTTBgColor
+    UINT      themeTTTextColor
+    UINT      themeTTGlowColor
+    
+    ' Typography &amp; Glow Attributes
+    UINT      hLinkFont          ' Handle for owner-drawn link font
+    INT       enableLinkGlow
+    UINT      linkGlowColor
+    
+    ' Container Hover &amp; Border Attributes
+    INT       isHovered
+    INT       enableHighlight
+    INT       headerHighlightStyle
+    UINT      highlightBorderColor
+
+    ' Owner-Drawn Links Arrays
+    EL_LINK_ITEM links[16]        ' MAX_EL_LINKS = 16
+    INT          linkCount
+    EL_LINK_ITEM linkBars[16]     ' MAX_EL_LINKS = 16
+    INT          linkBarCount
+    
+    ' Custom Owner-Drawn Layered Tooltip Window
+    UINT      hwndCustomTT       ' Tooltip Window Handle (UINT)
+    WSTRING   activeTipText[128] ' Buffer for active tooltip text
+    
+    ' Interactive Link States
+    INT       hoveredLinkIndex   ' Active hover index (-1 = none)
+    INT       pressedLinkIndex   ' Active click index (-1 = none)
+    INT       hoveredBarIndex
+    INT       pressedBarIndex
+
+    ' GDI+ Quality Toggles
+    INT       enableClearType
+    INT       enableSmoothing
+ENDTYPE</code></pre>
+
+    <!-- 3. Lifecycle -->
+    <h2 id="lifecycle">3. Registration &amp; Lifecycle APIs</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Exported Function</th>
+                <th>Signature / Return</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>EL_RegisterControl</code></td>
+                <td><code>INT</code></td>
+                <td>Registers both <code>IW_EnhancedLabelClass</code> and <code>IW_EnhancedTooltipClass</code> window classes with <code>RegisterClassExA</code>. Must be called once before control instantiation.</td>
+            </tr>
+            <tr>
+                <td><code>EL_UnregisterControl</code></td>
+                <td><code>INT</code></td>
+                <td>Unregisters both custom window classes on application shutdown.</td>
+            </tr>
+            <tr>
+                <td><code>EL_Create</code></td>
+                <td><code>(hwndParent:UINT, controlID:INT) -&gt; POINTER</code></td>
+                <td>Instantiates the custom control over a static placeholder control ID, caching full dimensions and initializing GDI+.</td>
+            </tr>
+            <tr>
+                <td><code>EL_Destroy</code></td>
+                <td><code>(ptr:POINTER) -&gt; INT</code></td>
+                <td>Triggers <code>DestroyWindow</code> and frees allocated internal memory structures and typography handles.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- 4. Styling -->
+    <h2 id="styling">4. Styling &amp; Layout Configuration APIs</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Exported API</th>
+                <th>Parameters</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>EL_ApplyTheme</code></td>
+                <td><code>(ptr:POINTER, themeID:INT)</code></td>
+                <td>Applies visual theme presets (Dark Slate, Office Blue, Glass Minimal, Crimson Dark) and synchronizes header, body, links, scrollbar, and tooltips.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderHeight</code></td>
+                <td><code>(ptr:POINTER, height:INT)</code></td>
+                <td>Sets header section height in pixels.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderBackgroundGradient</code></td>
+                <td><code>(ptr:POINTER, col1:UINT, col2:UINT, isVertical:INT)</code></td>
+                <td>Applies a 2-stop GDI+ linear gradient to the header.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderIconPNG</code></td>
+                <td><code>(ptr:POINTER, pFilePath:POINTER, width:INT, height:INT)</code></td>
+                <td>Loads and assigns a 32-bit GDI+ PNG image file to the header icon position.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderBackgroundImage</code></td>
+                <td><code>(ptr:POINTER, hBitmap:UINT, width:INT, height:INT)</code></td>
+                <td>Assigns a custom background image bitmap to the header region.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetBodyBackgroundImage</code></td>
+                <td><code>(ptr:POINTER, hBitmap:UINT, width:INT, height:INT)</code></td>
+                <td>Assigns a custom background image bitmap to the body panel region.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderBorder</code></td>
+                <td><code>(ptr, borderSide, borderColor, borderWidth, indentX, indentY)</code></td>
+                <td>Renders side-specific accent borders around the header area using standard GDI pens.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderStandardLeftTitle</code></td>
+                <td><code>(ptr:POINTER, title:WSTRING, textColor:UINT, alignment:INT)</code></td>
+                <td>Sets wide header text, color, and alignment mode in single-title header mode.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderDetailsTitle</code></td>
+                <td><code>(ptr:POINTER, title:WSTRING, textColor:UINT, alignment:INT)</code></td>
+                <td>Sets primary header title text for split dual-header mode.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderDetailsDescription</code></td>
+                <td><code>(ptr:POINTER, desc:WSTRING, textColor:UINT, alignment:INT)</code></td>
+                <td>Sets subtitle/description text line rendered under primary title in dual-header mode.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderDetailsDescriptionFont</code></td>
+                <td><code>(ptr:POINTER, fontName:WSTRING, size, weight, isItalic)</code></td>
+                <td>Creates and assigns a custom GDI font handle for the description line.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderFont</code></td>
+                <td><code>(ptr:POINTER, fontName:WSTRING, size, weight, isItalic)</code></td>
+                <td>Creates and assigns a custom GDI font handle for primary header title rendering.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetLinkBarHeight</code></td>
+                <td><code>(ptr:POINTER, height:INT)</code></td>
+                <td>Enables and defines pixel height for the horizontal toolbar strip at the control base.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetLinkBarBackgroundGradient</code></td>
+                <td><code>(ptr:POINTER, col1:UINT, col2:UINT, isVertical:INT)</code></td>
+                <td>Applies a 2-stop linear gradient background to the horizontal link bar strip.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetLinkBarVerticalSeparator</code></td>
+                <td><code>(ptr:POINTER, showSeparator, separatorColor, separatorWidth, separatorIndent)</code></td>
+                <td>Renders vertical accent dividers inside the bottom link bar strip.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetLinkFont</code></td>
+                <td><code>(ptr:POINTER, fontName:WSTRING, size, weight, isItalic)</code></td>
+                <td>Creates and assigns a custom typography font handle for all owner-drawn links.</td>
+            </tr>
+            <tr>
+                <td><code>EL_EnableLinkGlow</code></td>
+                <td><code>(ptr:POINTER, enable:INT, glowColor:UINT)</code></td>
+                <td>Enables high-contrast outer glowing halos around links on mouse hover.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetLinkColumns</code></td>
+                <td><code>(ptr:POINTER, columns, colWidth, colGapX, rowGapY)</code></td>
+                <td>Configures multi-column link grid layouts with dynamic column spacing.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderIcon</code></td>
+                <td><code>(ptr:POINTER, hIcon:UINT, width:INT, height:INT)</code></td>
+                <td>Assigns an <code>HICON</code> handle. Automatically indents header title text past icon bounds.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderOnClickCommand</code></td>
+                <td><code>(ptr:POINTER, cmdID:INT)</code></td>
+                <td>Assigns a command ID to trigger when clicking the header zone.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetHeaderHighlightStyle</code></td>
+                <td><code>(ptr:POINTER, enable, bWidth, bColor, tColor, a1..a4)</code></td>
+                <td>Enables/disables the dynamic accent outline highlight on mouse hover.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetBodySolidColor</code></td>
+                <td><code>(ptr:POINTER, bgColor:UINT)</code></td>
+                <td>Sets solid background color for the body panel.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetBody3StopGradient</code></td>
+                <td><code>(ptr:POINTER, top:UINT, mid:UINT, bot:UINT, isVert:INT)</code></td>
+                <td>Renders a 3-stop GDI+ linear preset blend gradient across the body background.</td>
+            </tr>
+            <tr>
+                <td><code>EL_SetBodyBorder</code></td>
+                <td><code>(ptr, borderSide, borderColor, borderWidth, indentX, indentY)</code></td>
+                <td>Renders side-specific accent borders around the body area.</td>
+            </tr>
+            <tr>
+                <td><code>EL_EnableClearType</code></td>
+                <td><code>(ptr:POINTER, enable:INT)</code></td>
+                <td>Enables GDI+ ClearType grid-fit text rendering hint.</td>
+            </tr>
+            <tr>
+                <td><code>EL_EnableHighQualitySmoothingMode</code></td>
+                <td><code>(ptr:POINTER, enable:INT)</code></td>
+                <td>Enables high-quality GDI+ graphics anti-aliasing smoothing.</td>
+            </tr>
+            <tr>
+                <td><code>EL_Resize</code></td>
+                <td><code>(ptr:POINTER, x:INT, y:INT, width:INT, height:INT)</code></td>
+                <td>Resizes and repositions the control window while auto-clamping scroll offset.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- 5. Owner-Drawn Links -->
+    <h2 id="links-engine">5. Owner-Drawn Link Engine APIs</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Exported API</th>
+                <th>Parameters</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>EL_AddLink</code></td>
+                <td><code>(ptr, cmdID, pText, pTips, textColor, highlight, bgHighlight, alpha, bold, underline, indent)</code></td>
+                <td>Registers a standard owner-drawn text link with custom hover/active click feedback and custom tooltip popup.</td>
+            </tr>
+            <tr>
+                <td><code>EL_AddPNGLink</code></td>
+                <td><code>(ptr, cmdID, pFilePath, pText, pTips, textColor, highlight, bgHighlight, imgWidth, imgHeight, indent)</code></td>
+                <td>Registers an owner-drawn link with a 32-bit GDI+ PNG image asset with native alpha blending.</td>
+            </tr>
+            <tr>
+                <td><code>EL_AddContentLink</code></td>
+                <td><code>(ptr, cmdID, hBmp, pText, pTips, transparentCol, textColor, highlight, bgHighlight, alpha, bold, underline, indent)</code></td>
+                <td>Registers an owner-drawn content link with an attached bitmap/icon graphic (transparency keying supported).</td>
+            </tr>
+            <tr>
+                <td><code>EL_AddLinkBarItem</code></td>
+                <td><code>(ptr, cmdID, pText, pTips, textColor, highlight, bgHighlight, alpha, bold, underline, indent)</code></td>
+                <td>Registers a text item directly inside the horizontal bottom link bar strip.</td>
+            </tr>
+            <tr>
+                <td><code>EL_AddCategoryHeader</code></td>
+                <td><code>(ptr, categoryID, pText, textColor, headerBgColor)</code></td>
+                <td>Adds a collapsible sub-group category header item inside the body region.</td>
+            </tr>
+            <tr>
+                <td><code>EL_ToggleCategory</code></td>
+                <td><code>(ptr:POINTER, categoryID:INT)</code></td>
+                <td>Toggles the collapsed/expanded state of a sub-group category.</td>
+            </tr>
+            <tr>
+                <td><code>EL_ClearAllLinks</code></td>
+                <td><code>(ptr:POINTER)</code></td>
+                <td>Flushes all registered links from the container and hides active tooltips.</td>
+            </tr>
+            <tr>
+                <td><code>EL_RemoveLink</code></td>
+                <td><code>(ptr:POINTER, cmdID:UINT)</code></td>
+                <td>Removes a specific link by command ID and shifts remaining items in array.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- 6. State Query -->
+    <h2 id="state-query">6. State Query &amp; Getter APIs</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Query API</th>
+                <th>Return Type</th>
+                <th>Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td><code>EL_IsCollapsed</code></td>
+                <td><code>INT</code></td>
+                <td>Returns <code>TRUE</code> (1) if body is collapsed, <code>FALSE</code> (0) if expanded.</td>
+            </tr>
+            <tr>
+                <td><code>EL_GetHeaderHeight</code></td>
+                <td><code>INT</code></td>
+                <td>Returns active header height setting in pixels.</td>
+            </tr>
+            <tr>
+                <td><code>EL_GetControlHeight</code></td>
+                <td><code>INT</code></td>
+                <td>Returns total active control window height (header + body) in pixels.</td>
+            </tr>
+            <tr>
+                <td><code>EL_GetHeaderTitle</code></td>
+                <td><code>INT</code></td>
+                <td>Copies internal wide title string to a destination buffer using Win32 <code>lstrcpynW</code>.</td>
+            </tr>
+            <tr>
+                <td><code>EL_GetScrollOffset</code> / <code>EL_SetScrollOffset</code></td>
+                <td><code>INT</code></td>
+                <td>Gets or sets active scroll position in pixels.</td>
+            </tr>
+            <tr>
+                <td><code>EL_GetLinkCount</code></td>
+                <td><code>INT</code></td>
+                <td>Returns total number of registered content links in the container.</td>
+            </tr>
+            <tr>
+                <td><code>EL_GetLinkBarCount</code></td>
+                <td><code>INT</code></td>
+                <td>Returns total number of items registered in the bottom link bar strip.</td>
+            </tr>
+            <tr>
+                <td><code>EL_GetHoveredLinkIndex</code></td>
+                <td><code>INT</code></td>
+                <td>Returns index of currently hovered link (-1 = none).</td>
+            </tr>
+            <tr>
+                <td><code>EL_GetMaxScrollOffset</code></td>
+                <td><code>INT</code></td>
+                <td>Calculates and returns maximum allowable scroll limit based on content height.</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <!-- 7. Events -->
+    <h2 id="events">7. Event Model &amp; Animation System</h2>
+    <h3>Interactive Event Handlers</h3>
+    <ul>
+        <li><code>WM_MOUSEMOVE</code>: Checks mouse coordinates against container bounds, bottom link bar items, and link bounding boxes (<code>rcBounds</code>). Updates hover indices, swaps cursor to <code>IDC_HAND</code> (32649), and dispatches custom tooltip positioning via <code>ShowCustomTooltip</code> / <code>HideCustomTooltip</code>.</li>
+        <li><code>WM_LBUTTONDOWN</code>: Instantly dismisses active tooltips via <code>HideCustomTooltip</code>, detects header clicks to toggle collapse, or processes link item hits with mouse capture (<code>SetCapture</code>).</li>
+        <li><code>WM_LBUTTONUP</code>: Releases capture, clears press states, and dispatches a <code>WM_COMMAND</code> (<code>0x0111</code>) notification with the link's <code>cmdID</code> directly to the parent window.</li>
+        <li><code>WM_MOUSEWHEEL</code>: Calculates vertical scroll adjustments, clamps to <code>maxScroll</code> limits, and repaints container.</li>
+        <li><code>WM_KEYDOWN</code>: Handles keyboard accessibility (TAB navigation, Space/Enter activation, and sub-group category expansion).</li>
+    </ul>
+
+    <h3>Collapse / Expand Animation Loop</h3>
+    <ol>
+        <li>User clicks header zone or calls <code>EL_ToggleCollapse(ptr)</code>.</li>
+        <li>Control captures an offscreen bitmap snapshot (<code>TakeControlSnapshot</code>) of its current visual state.</li>
+        <li><code>isCollapsed</code> flag toggles, and a 16ms Win32 timer (<code>EL_TIMER_ID = 1001</code>) starts.</li>
+        <li><code>WM_TIMER</code> calculates progressive height steps using proportional quadratic ease-out deceleration math:
+            <br><code>animStep = (targetHeight - currentHeight) / 3</code></li>
+        <li>Control resizes dynamically via <code>MoveWindow</code> while blitting the cached snapshot during animation steps.</li>
+        <li>Timer is killed via <code>KillTimer</code> upon reaching target height.</li>
+    </ol>
+
+    <!-- 8. Quickstart Guide -->
+    <h2 id="quickstart">8. Quick-Start Integration Guide</h2>
+    <p>To integrate <code>EnhancedLabels.dll</code> inside an IWBasic 2.5 application:</p>
+    <pre><code>$INCLUDE "EnhancedLabels.inc"
+
+$MAIN
+    UINT hMainWin
+    POINTER pLabel
+    
+    ' 1. Register DLL Window Class
+    IF EL_RegisterControl() = 0 THEN END
+    
+    ' 2. Open Stage Window
+    OPENWINDOW hMainWin, 0, 0, 480, 400, @CAPTION|@SYSMENU|@MINBOX, 0, "EnhancedLabels App", NULL
+    
+    ' 3. Place static placeholder (ID = 100)
+    CONTROL hMainWin, @STATIC, "", 20, 20, 440, 320, 0, 100
+    
+    ' 4. Bind Control Instance
+    pLabel = EL_Create(hMainWin, 100)
+    
+    IF pLabel &lt;&gt; NULL THEN
+        ' Apply Theme &amp; Header Title
+        EL_ApplyTheme(pLabel, 0) ' 0 = Dark Slate
+        EL_SetHeaderStandardLeftTitle(pLabel, "Security Controls", 0xFFFFFF, 0)
+        
+        ' Add Text Links
+        EL_AddLink(pLabel, 1001, "Run System Diagnostic", "Executes full hardware check", 0xDDDDDD, 0x00FF00, 0x222222, 255, 1, 0, 12)
+        EL_AddLink(pLabel, 1002, "View Activity Logs", "Opens local security audit log", 0xDDDDDD, 0x00FF00, 0x222222, 255, 0, 1, 12)
+    ENDIF
+
+    WAITUNTIL hMainWin = 0
+    
+    ' Cleanup
+    IF pLabel &lt;&gt; NULL THEN EL_Destroy(pLabel)
+    EL_UnregisterControl()
+END</code></pre>
+
+    <!-- 9. Icons -->
+    <h2 id="icons">9. Win32 System Icon Reference Table</h2>
+    <p>Common standard system icons accessible via <code>LoadIconA(NULL, ID)</code> or <code>LoadImageA</code> for headers and content links:</p>
+    <table>
+        <thead>
+            <tr>
+                <th>Resource Constant</th>
+                <th>ID Value</th>
+                <th>Icon Description</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr><td><code>IDI_APPLICATION</code></td><td>32512</td><td>Default Application / Window Icon</td></tr>
+            <tr><td><code>IDI_HAND</code></td><td>32513</td><td>Critical Stop / Error (Red Circle X)</td></tr>
+            <tr><td><code>IDI_QUESTION</code></td><td>32514</td><td>Help / Query (Blue Question Mark)</td></tr>
+            <tr><td><code>IDI_EXCLAMATION</code></td><td>32515</td><td>Warning / Caution (Yellow Triangle)</td></tr>
+            <tr><td><code>IDI_ASTERISK</code></td><td>32516</td><td>Information / Notice (Blue "i")</td></tr>
+            <tr><td><code>IDI_WINLOGO</code></td><td>32517</td><td>Legacy Windows Flag Logo</td></tr>
+            <tr><td><code>IDI_SHIELD</code></td><td>32518</td><td>UAC Security Shield</td></tr>
+            <tr><td><code>OBM_CHECK</code></td><td>32760</td><td>Standard Checkmark Indicator</td></tr>
+            <tr><td><code>OBM_MNUBAR</code></td><td>32740</td><td>Menu / Hamburger Bar Indicator</td></tr>
+        </tbody>
+    </table>
+</div>
+
+</body>
+</html>
