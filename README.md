@@ -23,7 +23,6 @@ A lightweight, high-performance Win32 C dynamic-link library (DLL) designed to e
 │   └── enhancedlabels.inc     # Public API header & definitions
 ├── examples/
 │   └── test_app.iwb           # IWBasic 2.5 usage sample
-├── bin/                       # Compiled binaries (.dll, .lib
-)
+├── bin/                       # Compiled binaries (.dll, .lib)
 ├── EL_Ref.html                # Reference Api Usage
 └── FILE_ID.DIZ                # Project description
