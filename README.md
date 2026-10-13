@@ -11,7 +11,6 @@ A lightweight, high-performance Win32 C dynamic-link library (DLL) designed to e
 - **Advanced Typography:** Support for custom fonts, anti-aliased text rendering, and vertical/horizontal text centering.
 - **Custom Borders & Padding:** Add sharp or rounded borders with configurable margin and padding.
 - **Zero Heavy Dependencies:** Written in iwBasic against standard Win32 APIs (`GDI32` / `User32`), ensuring minimal memory footprint and high FPS compatibility.
-- **Universal Compatibility:** Can be called from C/C++, IWBasic, FreeBASIC, Pelles C, Delphi, or any language supporting standard `stdcall`/`cdecl` Win32 DLL exports.
 
 ---
 
