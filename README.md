@@ -1,3 +1,7 @@
+![Platform](https://img.shields.io/badge/Platform-Windows%207%20%7C%208%20%7C%2010%20%7C%2011-blue)
+![Language](https://img.shields.io/badge/Language-IWBasic%202.5-orange)
+![License](https://img.shields.io/badge/License-Freeware-green)
+
 # EnhancedLabels DLL
 
 A lightweight, high-performance Win32 C dynamic-link library (DLL) designed to extend standard GUI static text controls with advanced visual features such as custom typography, colored backgrounds, gradient fills, borders, anti-aliased rendering, and dynamic text alignment.
